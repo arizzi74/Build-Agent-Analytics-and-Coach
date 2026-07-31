@@ -19,6 +19,9 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefre
     : icon === "cost" ? "💎"
     : icon === "duration" ? "⏱️"
     : icon === "tokens" ? "🔢"
+    : icon === "wallclock" ? "🕐"
+    : icon === "avginteraction" ? "⚡"
+    : icon === "avgpause" ? "☕"
     : null;
 
   const modifier = icon === "user"
@@ -31,6 +34,12 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefre
     ? " ba-kpi-card--duration"
     : icon === "tokens"
     ? " ba-kpi-card--tokens"
+    : icon === "wallclock"
+    ? " ba-kpi-card--wallclock"
+    : icon === "avginteraction"
+    ? " ba-kpi-card--avginteraction"
+    : icon === "avgpause"
+    ? " ba-kpi-card--avgpause"
     : "";
 
   const isLoading = loading || refreshing;

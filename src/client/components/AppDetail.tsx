@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { display, value, countMessagesBySender } from "../utils/fields.ts";
-import { formatImplDuration, getImplMinutes } from "../utils/workingDuration.ts";
+import { formatImplDuration, getImplMinutes, calculateDurationMetrics, formatDurationMs } from "../utils/workingDuration.ts";
+import type { DurationMetrics } from "../utils/workingDuration.ts";
 import { fetchConversations, fetchMessages, fetchCheckpoints, fetchAppNames, fetchAppComposition, fetchSettings, saveSettings } from "../services/api.ts";
 import type { AppComposition, ComponentItem } from "../services/api.ts";
 import { analyzeConversation, aggregateApplicationUsage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
@@ -25,6 +26,7 @@ import { useQueryTracker } from "../services/queryTracker.ts";
 import { SkeletonAppDetailView } from "./Skeleton.tsx";
 import KpiCard from "./KpiCard.tsx";
 import KpiInfoModal, { KPI_DESCRIPTIONS } from "./KpiInfoModal.tsx";
+import type { KpiInfo } from "./KpiInfoModal.tsx";
 import DataTable from "./DataTable.tsx";
 
 interface AppDetailProps {
@@ -219,6 +221,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
   const [totalCheckpoints, setTotalCheckpoints] = useState(0);
   const [implDuration, setImplDuration] = useState("");
   const [implMinutes, setImplMinutes] = useState(0);
+  const [durationMetrics, setDurationMetrics] = useState<DurationMetrics | null>(null);
   const [appTokenUsage, setAppTokenUsage] = useState<ApplicationTokenUsage | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -325,6 +328,9 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
       const minutes = getImplMinutes(allConvoMessages);
       setImplMinutes(minutes);
+
+      const metrics = calculateDurationMetrics(allConvoMessages);
+      setDurationMetrics(metrics);
     } catch (e) {
       console.error("AppDetail load error:", e);
     } finally {
@@ -654,12 +660,38 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
       )}
 
       {/* KPI Info Modal */}
-      {kpiInfoKey && KPI_DESCRIPTIONS[kpiInfoKey] && (
-        <KpiInfoModal
-          info={KPI_DESCRIPTIONS[kpiInfoKey]}
-          onClose={() => setKpiInfoKey(null)}
-        />
-      )}
+      {kpiInfoKey && KPI_DESCRIPTIONS[kpiInfoKey] && (() => {
+        const info: KpiInfo = { ...KPI_DESCRIPTIONS[kpiInfoKey] };
+        // Inject duration detail metrics when showing the duration KPI
+        if (kpiInfoKey === "duration" && durationMetrics) {
+          info.details = [
+            {
+              icon: "🕐",
+              label: "Wall-Clock",
+              value: formatDurationMs(durationMetrics.wallClockMs),
+              tooltip: `Tempo totale trascorso dal primo all'ultimo messaggio (${durationMetrics.turnCount} turni)`,
+            },
+            {
+              icon: "⚡",
+              label: "Avg Interaction",
+              value: formatDurationMs(durationMetrics.avgInteractionMs),
+              tooltip: `Media su ${durationMetrics.turnCount} turni`,
+            },
+            {
+              icon: "☕",
+              label: "Avg Pause",
+              value: formatDurationMs(durationMetrics.avgPauseMs),
+              tooltip: "Tempo medio di riflessione dell'utente tra un turno e il successivo",
+            },
+          ];
+        }
+        return (
+          <KpiInfoModal
+            info={info}
+            onClose={() => setKpiInfoKey(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

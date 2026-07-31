@@ -1,11 +1,19 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 
+export interface KpiDetailMetric {
+  icon: string;
+  label: string;
+  value: string;
+  tooltip?: string;
+}
+
 export interface KpiInfo {
   icon: string;
   title: string;
   description: string;
   methodology: string;
+  details?: KpiDetailMetric[];
 }
 
 interface KpiInfoModalProps {
@@ -32,6 +40,23 @@ export default function KpiInfoModal({ info, onClose }: KpiInfoModalProps) {
         </div>
         <div className="ba-kpi-info-modal__body">
           <p className="ba-kpi-info-modal__description">{info.description}</p>
+
+          {/* Detail metrics grid */}
+          {info.details && info.details.length > 0 && (
+            <div className="ba-kpi-info-modal__details">
+              <h4 className="ba-kpi-info-modal__details-title">📊 Dettagli</h4>
+              <div className="ba-kpi-info-modal__details-grid">
+                {info.details.map((d, i) => (
+                  <div className="ba-kpi-info-modal__detail-card" key={i} title={d.tooltip || ""}>
+                    <span className="ba-kpi-info-modal__detail-icon">{d.icon}</span>
+                    <span className="ba-kpi-info-modal__detail-value">{d.value}</span>
+                    <span className="ba-kpi-info-modal__detail-label">{d.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="ba-kpi-info-modal__methodology">
             <h4 className="ba-kpi-info-modal__methodology-title">📐 Come viene calcolato</h4>
             <p className="ba-kpi-info-modal__methodology-text">{info.methodology}</p>
