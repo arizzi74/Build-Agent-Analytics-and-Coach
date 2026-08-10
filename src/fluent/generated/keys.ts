@@ -8,10 +8,12 @@ declare global {
                     '0987e6c83b8a0b949a1600b693e45ace': {
                         table: 'sys_wdf_external_connector_mapping'
                         id: '0987e6c83b8a0b949a1600b693e45ace'
+                        deleted: true
                     }
                     '153866cc3b8a0b949a1600b693e45afd': {
                         table: 'sys_openapi'
                         id: '153866cc3b8a0b949a1600b693e45afd'
+                        deleted: true
                     }
                     '28c9ea843bca0b949a1600b693e45af2': {
                         table: 'sys_openapi_operation'
@@ -38,10 +40,12 @@ declare global {
                     e538a6cc3b8a0b949a1600b693e45a68: {
                         table: 'sys_openapi_operation'
                         id: 'e538a6cc3b8a0b949a1600b693e45a68'
+                        deleted: true
                     }
                     f60a72483b424b949a1600b693e45ac3: {
                         table: 'sys_openapi_operation'
                         id: 'f60a72483b424b949a1600b693e45ac3'
+                        deleted: true
                     }
                     package_json: {
                         table: 'sys_module'
@@ -64,6 +68,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '00c0077d501a44fcb17fe78d2f7cf3e2'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-cytoscape--cd3a989c'
                         }
@@ -152,6 +157,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '251e0ed57c294d1fb6bb53e76e175034'
+                        key: {
+                            application_file: '8e1422472b6844808a275ec488be726e'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '2689e1c691e24fdd91b2c331032e3eaa'
                         key: {
@@ -161,7 +174,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '294a518ca129416fa2746f8783c3d193'
-                        deleted: false
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7'
                         }
@@ -183,9 +196,24 @@ declare global {
                     },
                     {
                         table: 'sys_ux_lib_asset'
+                        id: '30539658fd1b492d872b23ddeb373fa0'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-elkjs--6b05a77c.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
                         id: '3156880277e24304883f506edad54af4'
                         key: {
                             name: 'x_snc_build_agranx/mindmap-definition-fc14e90a.js.map'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '326ca9c3e12e47db8ef5b3a808cf14ea'
+                        key: {
+                            application_file: '8608d9ea5d9b49ce9cdf5dc63211110b'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
                     {
@@ -254,6 +282,13 @@ declare global {
                     },
                     {
                         table: 'sys_ux_lib_asset'
+                        id: '3ea5953cc08b4cdc85f94057d48a705d'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--699e6243'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
                         id: '3f65fa5541ba42e29049644d808351c2'
                         key: {
                             name: 'x_snc_build_agranx/styles-c10674c1'
@@ -280,6 +315,21 @@ declare global {
                         id: '44b07e4e3c5147368ee1b5435bb4ea29'
                         key: {
                             name: 'x_snc_build_agranx/main'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '48458e580b1749d38eec32473a3b1e80'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--2e2b8e47.js.map'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '48503377d76943b8ab623f21119338e2'
+                        key: {
+                            application_file: '3ea5953cc08b4cdc85f94057d48a705d'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
                     {
@@ -364,7 +414,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '5c6886bde46d4a61a42c8109321e87b0'
-                        deleted: false
+                        deleted: true
                         key: {
                             application_file: 'c1d520e7603040109abc2ab4b2b2b1bf'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -380,6 +430,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '6038318bbf7e4e27b882d1553592f517'
+                        deleted: true
                         key: {
                             application_file: 'ce124143319540c0b0c79876f7bbd18f'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -410,6 +461,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '6596c3e2857c480dad7a942d352d88f0'
+                        deleted: true
                         key: {
                             application_file: '00c0077d501a44fcb17fe78d2f7cf3e2'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -468,6 +520,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '7203163a0cf544588f957d026c62dc56'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-elkjs--7e8d0056.js.map'
                         }
@@ -477,6 +530,14 @@ declare global {
                         id: '72a923a364dd40dcb306752134dc86ac'
                         key: {
                             name: 'x_snc_build_agranx/classDiagram-70f12bd4'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '76586900670346b2b901bdeea42bb164'
+                        key: {
+                            application_file: '9d34da6b058b4dd3a74bcd668bb52e8c'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
                     {
@@ -504,6 +565,13 @@ declare global {
                     },
                     {
                         table: 'sys_ux_lib_asset'
+                        id: '8608d9ea5d9b49ce9cdf5dc63211110b'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-elkjs--6b05a77c'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
                         id: '866f770f29c04f848de341d0926754b2'
                         key: {
                             name: 'x_snc_build_agranx/quadrantDiagram-120e2f19'
@@ -521,6 +589,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '87950f75ec4342afad7df7968e0771e0'
+                        deleted: true
                         key: {
                             application_file: 'fc6b5c4daaa1450880c307908547ed87'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -545,6 +614,13 @@ declare global {
                         id: '8c774838c3d4465aaff8f8e963956d49'
                         key: {
                             name: 'x_snc_build_agranx/quadrantDiagram-120e2f19.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '8e1422472b6844808a275ec488be726e'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--699e6243.js.map'
                         }
                     },
                     {
@@ -575,6 +651,21 @@ declare global {
                         id: '9b8572124ebf4e7db3e15ceb08d1a11a'
                         key: {
                             name: 'x_snc_build_agranx/graph'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '9c584eb39baa4c699973944f17bf762d'
+                        key: {
+                            application_file: '30539658fd1b492d872b23ddeb373fa0'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '9d34da6b058b4dd3a74bcd668bb52e8c'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--2e2b8e47'
                         }
                     },
                     {
@@ -629,7 +720,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'acd784555aad45419edb6d221b7eb384'
-                        deleted: false
+                        deleted: true
                         key: {
                             application_file: '294a518ca129416fa2746f8783c3d193'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -714,7 +805,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: 'c1d520e7603040109abc2ab4b2b2b1bf'
-                        deleted: false
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7.js.map'
                         }
@@ -741,6 +832,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'c4a27d6b962d4559b00e35800f4e8527'
+                        key: {
+                            application_file: '48458e580b1749d38eec32473a3b1e80'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'c5b89d522f884a39a07036fbf985d796'
                         key: {
@@ -750,6 +849,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'c90d413c5ab34b38911255c949549f72'
+                        deleted: true
                         key: {
                             application_file: '7203163a0cf544588f957d026c62dc56'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -766,6 +866,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: 'ce124143319540c0b0c79876f7bbd18f'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-cytoscape--cd3a989c.js.map'
                         }
@@ -918,6 +1019,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: 'fc6b5c4daaa1450880c307908547ed87'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-elkjs--7e8d0056'
                         }

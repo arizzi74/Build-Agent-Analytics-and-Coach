@@ -20,7 +20,7 @@
         "mermaid": "10.9.3"
     },
     "devDependencies": {
-        "@servicenow/sdk": "4.7.2",
+        "@servicenow/sdk": "4.10.1",
         "@servicenow/glide": "27.0.5",
         "@types/react": "18.3.12"
     }
