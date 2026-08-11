@@ -5,10 +5,18 @@ declare global {
         namespace Internal {
             interface Keys extends KeysRegistry {
                 explicit: {
+                    '011f1db60faa4310083782d300d1b27c': {
+                        table: 'sys_scope_privilege'
+                        id: '011f1db60faa4310083782d300d1b27c'
+                    }
                     '0987e6c83b8a0b949a1600b693e45ace': {
                         table: 'sys_wdf_external_connector_mapping'
                         id: '0987e6c83b8a0b949a1600b693e45ace'
                         deleted: true
+                    }
+                    '1283657e0fea4310083782d300d1b2e9': {
+                        table: 'sys_scope_privilege'
+                        id: '1283657e0fea4310083782d300d1b2e9'
                     }
                     '153866cc3b8a0b949a1600b693e45afd': {
                         table: 'sys_openapi'
@@ -20,9 +28,29 @@ declare global {
                         id: '28c9ea843bca0b949a1600b693e45af2'
                         deleted: true
                     }
+                    '491fddb20fea4310083782d300d1b2a0': {
+                        table: 'sys_scope_privilege'
+                        id: '491fddb20fea4310083782d300d1b2a0'
+                    }
+                    activity_heatmap_card_widget: {
+                        table: 'sys_aix_widget'
+                        id: 'f2b02b26bb7847a5b2d5ccea1532d529'
+                    }
+                    analytics_navigator_agent: {
+                        table: 'sn_aia_agent'
+                        id: '7511ea7edca64d079b22aa0f906cee4d'
+                    }
+                    analytics_navigator_agent_acl: {
+                        table: 'sys_security_acl'
+                        id: '09986ef634294fa7b4b42ea7de9e5835'
+                    }
                     'analytics-dashboard-module': {
                         table: 'sys_app_module'
                         id: 'b7aba667942d4cacbb2238245be2b41a'
+                    }
+                    app_overview_card_widget: {
+                        table: 'sys_aix_widget'
+                        id: '03f10bfb8429403088ee247195c252cd'
                     }
                     'app.css': {
                         table: 'sys_ux_theme_asset'
@@ -37,6 +65,10 @@ declare global {
                         table: 'sys_app_application'
                         id: 'e00f541a4cc945a7aeb71f09a67d3742'
                     }
+                    c91fddb20fea4310083782d300d1b2a4: {
+                        table: 'sys_scope_privilege'
+                        id: 'c91fddb20fea4310083782d300d1b2a4'
+                    }
                     e538a6cc3b8a0b949a1600b693e45a68: {
                         table: 'sys_openapi_operation'
                         id: 'e538a6cc3b8a0b949a1600b693e45a68'
@@ -46,6 +78,14 @@ declare global {
                         table: 'sys_openapi_operation'
                         id: 'f60a72483b424b949a1600b693e45ac3'
                         deleted: true
+                    }
+                    f837e13a0f2e4310083782d300d1b25f: {
+                        table: 'sys_scope_privilege'
+                        id: 'f837e13a0f2e4310083782d300d1b25f'
+                    }
+                    nau_consumption_chart_widget: {
+                        table: 'sys_aix_widget'
+                        id: '19786c6043514107a484960a909f9752'
                     }
                     package_json: {
                         table: 'sys_module'
@@ -123,6 +163,15 @@ declare global {
                         key: {
                             application_file: '37c4686d545846de850bf5ef33b19145'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '1aba2164356c43a8a4410faedab63dd5'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                            tool: '9e340411d2084b5e8470d95b1f044891'
+                            name: 'Lookup Application'
                         }
                     },
                     {
@@ -214,6 +263,15 @@ declare global {
                         key: {
                             application_file: '8608d9ea5d9b49ce9cdf5dc63211110b'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: '344b52e67cf543f7a490a52c8085b398'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                            tool: 'ac2e4450f46b482ba4f8f255d0409310'
+                            name: 'Get NAU Consumption'
                         }
                     },
                     {
@@ -351,6 +409,13 @@ declare global {
                         id: '52971e42d2074331ae0d13d16e6a28b2'
                         key: {
                             name: 'x_snc_build_agranx/requirementDiagram-deff3bca.js.map'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '52ddebf53580456395396dcf190304d0'
+                        key: {
+                            name: 'Get App Overview'
                         }
                     },
                     {
@@ -518,6 +583,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_tool'
+                        id: '7120e1868ca649898f325b4418b70a4a'
+                        key: {
+                            name: 'Get App Activity Heatmap'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '7203163a0cf544588f957d026c62dc56'
                         deleted: true
@@ -640,6 +712,24 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_mapping'
+                        id: '9722728cbdc346d8a38282d2b2c19ae5'
+                        key: {
+                            agent_access_config: {
+                                id: 'ce4d673063c8423589df3cedc49d5f6b'
+                                key: {
+                                    agent: '7511ea7edca64d079b22aa0f906cee4d'
+                                }
+                            }
+                            role: {
+                                id: '850fad8368904c6c81fa917eb571dee1'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '97b0a83df11a4f56876724444eccc445'
                         key: {
@@ -666,6 +756,13 @@ declare global {
                         id: '9d34da6b058b4dd3a74bcd668bb52e8c'
                         key: {
                             name: 'x_snc_build_agranx/vendor-cytoscape--2e2b8e47'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: '9e340411d2084b5e8470d95b1f044891'
+                        key: {
+                            name: 'Lookup Application'
                         }
                     },
                     {
@@ -715,6 +812,13 @@ declare global {
                         id: 'aad90a1a1b5443d79eb1f40911acca83'
                         key: {
                             name: 'x_snc_build_agranx/flowDiagram-v2-96b9c2cf.js.map'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_tool'
+                        id: 'ac2e4450f46b482ba4f8f255d0409310'
+                        key: {
+                            name: 'Get NAU Consumption'
                         }
                     },
                     {
@@ -872,6 +976,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_agent_access_role_configuration'
+                        id: 'ce4d673063c8423589df3cedc49d5f6b'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'cf320f536b9d4088875ad8140351c64f'
                         key: {
@@ -888,6 +999,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_agent_config'
+                        id: 'd39c1478b04c427bb72cc1262df73b06'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'd47e329a2eb64f4cbee18cf2a72f334f'
                         key: {
@@ -899,6 +1017,15 @@ declare global {
                         id: 'dde806bc35c5426587f4e996b3b129ab'
                         key: {
                             name: 'x_snc_build_agranx/styles-c10674c1.js.map'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'dedb66c1c16f42dbb15c8c1712de7fec'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                            tool: '52ddebf53580456395396dcf190304d0'
+                            name: 'Get App Overview'
                         }
                     },
                     {
@@ -1017,11 +1144,28 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_aia_agent_tool_m2m'
+                        id: 'fb35c890bd22419b9b60024798a91754'
+                        key: {
+                            agent: '7511ea7edca64d079b22aa0f906cee4d'
+                            tool: '7120e1868ca649898f325b4418b70a4a'
+                            name: 'Get App Activity Heatmap'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'fc6b5c4daaa1450880c307908547ed87'
                         deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-elkjs--7e8d0056'
+                        }
+                    },
+                    {
+                        table: 'sn_aia_version'
+                        id: 'fc73c95c65ab4e8aa78c1dac10ccb640'
+                        key: {
+                            target_id: '7511ea7edca64d079b22aa0f906cee4d'
+                            version_name: 'V1'
                         }
                     },
                     {

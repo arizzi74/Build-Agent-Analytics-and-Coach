@@ -44,6 +44,8 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 ```
 ├── now.config.json                 # ServiceNow app configuration
 ├── package.json                    # Dependencies and scripts
+├── assets/                         # Screenshots of the AIUX widgets (for this README)
+├── docs/                           # Design notes (conversational navigation, example agent)
 └── src/
     ├── client/                     # React SPA (UI Page)
     │   ├── app.tsx                 # Root component with SPA router
@@ -58,13 +60,18 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
     │   │   ├── ConversationDetail.tsx # Message thread with Markdown rendering
     │   │   ├── DataTable.tsx          # Reusable sortable/expandable table
     │   │   ├── KpiCard.tsx            # KPI card with refresh and tooltip
+    │   │   ├── KpiInfoModal.tsx       # Modal explaining KPI definitions
+    │   │   ├── LoadingModal.tsx       # Blocking loading modal
     │   │   ├── MarkdownRenderer.tsx   # Markdown + Mermaid renderer
+    │   │   ├── NauBreakdown.tsx       # NAU consumption breakdown display
     │   │   ├── Navigation.tsx         # Top nav with tab routing
+    │   │   ├── Skeleton.tsx           # Skeleton loading placeholders
     │   │   ├── TimeSeriesView.tsx     # SVG dual-axis time-series chart
     │   │   ├── UserConsumption.tsx    # Monthly NAU consumption table
     │   │   └── UserProfile.tsx        # User profile with pie/timeline charts
     │   ├── services/
-    │   │   └── api.ts              # ServiceNow Table & Aggregate API client
+    │   │   ├── api.ts              # ServiceNow Table & Aggregate API client
+    │   │   └── queryTracker.ts     # Query performance/telemetry tracking
     │   ├── styles/                 # Modular CSS files
     │   │   ├── base.css            # Root variables, resets, layout
     │   │   ├── shared.css          # Shared component styles
@@ -76,6 +83,7 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
     │   │   ├── consumption.css     # Consumption view styles
     │   │   ├── user-profile.css    # User profile styles
     │   │   ├── json-tree.css       # JSON/tool output styles
+    │   │   ├── loading.css         # Loading modal / skeleton styles
     │   │   └── responsive.css      # Responsive breakpoints
     │   └── utils/
     │       ├── complexity.ts       # Complexity scoring, ROI, partner-hour estimates
@@ -83,15 +91,19 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
     │       ├── tokenEstimation.ts  # Token usage estimation (input/output/thinking)
     │       └── workingDuration.ts  # Implementation duration from message intervals
     ├── fluent/                     # ServiceNow Fluent metadata
-    │   ├── generated/
-    │   │   └── keys.ts             # Auto-generated record keys
+    │   ├── agents/
+    │   │   └── analytics-navigator.now.ts   # AI Agent (Otto) — conversational analytics
     │   ├── navigation/
     │   │   └── menu.now.ts         # Application menu + dashboard module
     │   ├── tables/
     │   │   ├── settings.now.ts     # User settings table
     │   │   └── timeseries_cache.now.ts  # TimeSeries cache table
-    │   └── ui-pages/
-    │       └── analytics.now.ts    # UI Page definition
+    │   ├── ui-pages/
+    │   │   └── analytics.now.ts    # UI Page definition
+    │   └── widgets/                # AIUX widgets (sys_aix_widget) rendered by Otto
+    │       ├── app-overview-card.now.ts     # App Overview Card widget
+    │       ├── nau-consumption-chart.now.ts # NAU Consumption Chart widget
+    │       └── activity-heatmap-card.now.ts # Activity Heatmap Card widget
     └── server/
         └── tsconfig.json           # Server-side TypeScript config
 ```
@@ -211,6 +223,52 @@ Agent task telemetry dashboard:
 - Task-level metrics: build-fix cycles, errors, rollbacks, lines of code changed
 - Event-level drill-down: steps within each task with individual timing
 - Status indicators: success, failure, in-progress
+
+---
+
+## Conversational Analytics — ServiceNow Otto & AIUX Widgets
+
+Beyond the SPA dashboard, this app exposes its analytics **conversationally**. Instead of clicking through views, a user can simply ask an AI Agent — and receive a rich, interactive card rendered directly in the chat.
+
+### ServiceNow Otto
+
+[**ServiceNow Otto**](https://www.servicenow.com/products/now-assist.html) (formerly *Now Assist*) is ServiceNow's generative-AI experience layer. It hosts AI Agents that understand natural-language requests, orchestrate tools, and stream responses into the Now Assist Panel. This app ships an AI Agent — **Build Agent Analytics Navigator** (`sn_aia_agent`) — that resolves application names to sys_ids, routes the user's intent to the right tool, and returns a visual widget as its answer.
+
+### What is an AIUX Widget?
+
+An **AIUX Widget** (`sys_aix_widget`) is a self-contained web component — built on [**Lit**](https://lit.dev/) and extending `AIUXWidgetElement` — that Otto can embed as a "visual response" inside a conversation. Each widget declares a small `input_schema` (its props), optionally loads its own data through a server-side data script, and renders itself with pure SVG and Horizon design tokens. In this app, an agent tool returns a flat payload matching the widget's `input_schema`, and Otto injects it into the widget, which then renders as a card in the chat.
+
+The three widgets below are wired to the Analytics Navigator agent and defined in `src/fluent/widgets/`.
+
+### App Overview Card
+
+![App Overview Card](assets/widget-app-overview-card.png)
+
+A compact overview of a single application. Shows the app name plus KPI tiles for conversation count, user messages, NowAssist Unit cost (25 NAU per user message), and total implementation duration (computed from turn-based working intervals).
+
+- **Input:** `appId` — the `sys_id` of the application (`sys_app`)
+- **Answers:** *"Tell me about app X"*, *"How is app Y doing?"*
+- **Source:** `src/fluent/widgets/app-overview-card.now.ts`
+
+### NAU Consumption Chart
+
+![NAU Consumption Chart](assets/widget-nau-consumption-chart.png)
+
+A monthly NowAssist Unit consumption dashboard with a horizontal bar chart of the top users ranked by NAU, KPI tiles (total NAU, active users, conversations), and the cost formula. Defaults to the current month when none is specified.
+
+- **Input:** `month` — in `YYYY-MM` format (optional)
+- **Answers:** *"How much are we consuming this month?"*, *"Who are the top consumers?"*
+- **Source:** `src/fluent/widgets/nau-consumption-chart.now.ts`
+
+### Activity Heatmap Card
+
+![Activity Heatmap Card](assets/widget-activity-heatmap-card.png)
+
+A GitHub contribution-style heatmap of daily message activity for a single application over the last ~3 months. Rows are days of the week, columns are weeks, and each cell is shaded by the number of messages exchanged that day. Includes KPI tiles (total messages, active days, busiest day) and an intensity legend, and scales responsively to the widget's width.
+
+- **Input:** `appId` — the `sys_id` of the application (`sys_app`)
+- **Answers:** *"When was app X most active?"*, *"Show me the activity heatmap for app Y"*
+- **Source:** `src/fluent/widgets/activity-heatmap-card.now.ts`
 
 ---
 
