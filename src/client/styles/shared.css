@@ -5,7 +5,23 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--ba-space-3);
-  margin-bottom: var(--ba-space-6);
+  margin-bottom: var(--ba-space-3);
+}
+
+.ba-kpi-disclaimer {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ba-text-secondary);
+  background: var(--ba-surface);
+  border-left: 3px solid var(--ba-primary-light);
+  border-radius: 0 var(--ba-radius-sm) var(--ba-radius-sm) 0;
+  padding: var(--ba-space-2) var(--ba-space-4);
+  margin: 0 0 var(--ba-space-5) 0;
+}
+
+.ba-kpi-disclaimer strong {
+  color: var(--ba-text);
+  font-weight: 700;
 }
 
 .ba-kpi-card {

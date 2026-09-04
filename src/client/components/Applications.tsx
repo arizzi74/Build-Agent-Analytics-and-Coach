@@ -315,6 +315,10 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
           onRefresh={refreshUsers}
         />
       </div>
+      <p className="ba-kpi-disclaimer">
+        ℹ️ KPI totals include <strong>all</strong> conversations — even those not linked to any application.
+        The table below only shows conversations associated with a specific app.
+      </p>
       <div className="ba-search">
         <span className="ba-search__icon">🔍</span>
         <input
