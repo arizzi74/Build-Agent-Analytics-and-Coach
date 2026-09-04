@@ -318,42 +318,43 @@ const script = `(function (data, options, input) {
 })(data, options, input);`
 
 const componentCompileMetadata = JSON.stringify({
-  imports: {
-    lit: ['html', 'css'],
-    '@servicenow/aiux-components-core': ['AIUXWidgetElement'],
-    '@servicenow/aiux-services': ['i18n'],
-  },
-  elementClassName: 'AppOverviewCard',
-  importBoundaries: [0, 152],
-  hasServerScript: true,
+    imports: {
+        lit: ['html', 'css'],
+        '@servicenow/aiux-components-core': ['AIUXWidgetElement'],
+        '@servicenow/aiux-services': ['i18n'],
+    },
+    elementClassName: 'AppOverviewCard',
+    importBoundaries: [0, 152],
+    hasServerScript: true,
 })
 
 Record({
-  $id: Now.ID['app_overview_card_widget'],
-  table: 'sys_aix_widget',
-  data: {
-    name: 'App Overview Card',
-    id: 'app-overview-card',
-    type: 'aix_widget',
-    purpose: 'component',
-    category: 'custom',
-    simple_widget: '0',
-    has_loader: '0',
-    chat_compatible: '0',
-    interactive_view_compatible: '0',
-    component: component,
-    script: script,
-    input_schema: JSON.stringify({
-      appId: {
-        type: 'String',
+    $id: Now.ID['app_overview_card_widget'],
+    table: 'sys_aix_widget',
+    data: {
+        name: 'App Overview Card',
+        id: 'app-overview-card',
+        type: 'aix_widget',
+        purpose: 'component',
+        category: 'custom',
+        simple_widget: 'false',
+        has_loader: 'false',
+        chat_compatible: 'false',
+        interactive_view_compatible: 'false',
+        component: component,
+        script: script,
+        input_schema: JSON.stringify({
+            appId: {
+                type: 'String',
+                description:
+                    'The sys_id of the application record (sys_app). Matches the application_id field on Build Agent conversations.',
+            },
+        }),
+        component_compile_metadata: componentCompileMetadata,
         description:
-          'The sys_id of the application record (sys_app). Matches the application_id field on Build Agent conversations.',
-      },
-    }),
-    component_compile_metadata: componentCompileMetadata,
-    description:
-      'Displays a compact overview card for a single application managed by Build Agent. Shows the app name, number of conversations, user message count, NowAssist Unit cost (25 NAU per user message), and total implementation duration computed from turn-based working intervals. Designed to be served by an AI Agent when a user asks about a specific application.',
-    best_for:
-      'Summarizing a single Build Agent application at a glance — name, conversation count, user message count, NowAssist Unit cost, and implementation duration. Ideal for conversational navigation where an AI agent has resolved an application and wants to show its key usage metrics as a card.',
-  },
+            'Displays a compact overview card for a single application managed by Build Agent. Shows the app name, number of conversations, user message count, NowAssist Unit cost (25 NAU per user message), and total implementation duration computed from turn-based working intervals. Designed to be served by an AI Agent when a user asks about a specific application.',
+        best_for:
+            'Summarizing a single Build Agent application at a glance — name, conversation count, user message count, NowAssist Unit cost, and implementation duration. Ideal for conversational navigation where an AI agent has resolved an application and wants to show its key usage metrics as a card.',
+        servicenow: 'false',
+    },
 })

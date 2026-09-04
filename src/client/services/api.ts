@@ -2,15 +2,37 @@ declare const window: any;
 
 const BASE = "/api/now/table";
 
-async function request(url: string) {
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "X-UserToken": window.g_ck,
-    },
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+/** Default per-request timeout (ms). Kept below the platform's ~60s transaction
+ *  limit so a slow/hung request fails fast and visibly instead of hanging. */
+const REQUEST_TIMEOUT_MS = 55000;
+
+/** Error thrown when a request is aborted due to the timeout. */
+export class RequestTimeoutError extends Error {
+  constructor(url: string) {
+    super(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`);
+    this.name = "RequestTimeoutError";
+  }
+}
+
+async function request(url: string, timeoutMs: number = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "X-UserToken": window.g_ck,
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new RequestTimeoutError(url);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function postRecord(table: string, data: any) {
@@ -124,24 +146,73 @@ export async function fetchDistinctCount(table: string, field: string, query = "
   return 0;
 }
 
+/**
+ * Aggregate COUNT grouped by a (possibly dot-walked) field, using the Stats API.
+ * Returns a Map of groupValue -> count. The Stats API's encoded-query parser
+ * turns `field LIKE value` into a SQL `LIKE '%value%'` substring match, which is
+ * how we count messages by inspecting the JSON `content` field WITHOUT ever
+ * downloading it to the client (the source of the previous 60s timeouts).
+ */
+export async function fetchAggregateCountByGroup(
+  table: string,
+  groupBy: string,
+  query = ""
+): Promise<Map<string, number>> {
+  const params = new URLSearchParams({
+    sysparm_count: "true",
+    sysparm_group_by: groupBy,
+  });
+  if (query) params.set("sysparm_query", query);
+  const { result } = await request(`${STATS_BASE}/${table}?${params}`);
+  const map = new Map<string, number>();
+  if (Array.isArray(result)) {
+    for (const grp of result) {
+      // Each group looks like { groupby_fields: [{ field, value }], stats: { count } }
+      const gbFields = grp.groupby_fields || [];
+      const gbVal = gbFields.length > 0 ? gbFields[0].value : "";
+      const count = parseInt(grp.stats?.count ?? "0", 10) || 0;
+      if (gbVal) map.set(gbVal, count);
+    }
+  }
+  return map;
+}
+
 export interface KpiCounts {
   conversations: number;
   messages: number;
   apps: number;
-  checkpoints: number;
+  nauUnits: number;
+  users: number;
 }
 
 /**
  * Fetch all KPI counts in parallel using the Aggregate API for real platform data.
  */
 export async function fetchKpiCounts(): Promise<KpiCounts> {
-  const [conversations, messages, apps, checkpoints] = await Promise.all([
+  const [conversations, messages, apps, nauUnits, users] = await Promise.all([
     fetchTableCount("sn_build_agent_conversation"),
     fetchTableCount("sn_build_agent_message"),
     fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY"),
-    fetchTableCount("sn_build_agent_checkpoint"),
+    fetchTotalNauConsumed(),
+    fetchDistinctCount("sn_build_agent_conversation", "user", "userISNOTEMPTY"),
   ]);
-  return { conversations, messages, apps, checkpoints };
+  return { conversations, messages, apps, nauUnits, users };
+}
+
+/**
+ * Calculate total Now Assist Units consumed (all-time) using the Stats API.
+ * Each interaction (user message, install, build_install, planning, app creation, interview) = 25 NAU.
+ */
+export async function fetchTotalNauConsumed(): Promise<number> {
+  const [userMsgs, installs, buildInstalls, planning, appCreations, interviews] = await Promise.all([
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"sender":"user"'),
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"toolActualName":"install"'),
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"toolActualName":"build_install"'),
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"toolActualName":"planning"'),
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"toolActualName":"create_new_servicenow_app"'),
+    fetchTableCount("sn_build_agent_message", 'contentLIKE"toolActualName":"interview"'),
+  ]);
+  return (userMsgs + installs + buildInstalls + planning + appCreations + interviews) * 25;
 }
 
 // ─── Conversations API ─────────────────────────────────────────────────────────
@@ -233,6 +304,28 @@ export async function fetchAppNames(appIds: string[]): Promise<Map<string, strin
     result.forEach((app: any) => {
       const id = typeof app.sys_id === "string" ? app.sys_id : app.sys_id?.value || "";
       const name = typeof app.name === "string" ? app.name : app.name?.display_value || app.name?.value || "";
+      if (id && name) nameMap.set(id, name);
+    });
+  }
+  return nameMap;
+}
+
+/**
+ * Resolve user display names (sys_user.name) from a list of sys_ids in one query.
+ */
+export async function fetchUserNames(userIds: string[]): Promise<Map<string, string>> {
+  const nameMap = new Map<string, string>();
+  if (userIds.length === 0) return nameMap;
+  const params = new URLSearchParams({
+    sysparm_display_value: "all",
+    sysparm_query: `sys_idIN${userIds.join(",")}`,
+    sysparm_fields: "sys_id,name",
+  });
+  const { result } = await request(`${BASE}/sys_user?${params}`);
+  if (result) {
+    result.forEach((u: any) => {
+      const id = typeof u.sys_id === "string" ? u.sys_id : u.sys_id?.value || "";
+      const name = typeof u.name === "string" ? u.name : u.name?.display_value || u.name?.value || "";
       if (id && name) nameMap.set(id, name);
     });
   }
@@ -618,22 +711,11 @@ export async function fetchMessagesForTimeSeries(appId: string): Promise<any[]> 
 // ─── User Consumption API ──────────────────────────────────────────────────────
 
 import type { NauBreakdown } from "../utils/fields.ts";
-import { classifyToolForNau } from "../utils/fields.ts";
-
-export interface UserConsumptionRow {
-  userId: string;
-  userName: string;
-  conversations: number;
-  userMessages: number;
-  nauUnits: number;
-  applicationNames: string[];
-  breakdown: NauBreakdown;
-}
 
 /**
  * Determines if a message content JSON represents a user message.
- * The content field is JSON with a "sender" property.
- * User messages have sender === "user".
+ * The content field is JSON with a "sender" property; user messages have sender === "user".
+ * Still used by fetchUserProfile (single-user detail view), which parses content directly.
  */
 function isUserMessageContent(contentField: any): boolean {
   const raw = typeof contentField === "string" ? contentField : contentField?.value || "";
@@ -646,147 +728,235 @@ function isUserMessageContent(contentField: any): boolean {
   }
 }
 
+export interface UserConsumptionRow {
+  userId: string;
+  userName: string;
+  conversations: number;
+  userMessages: number;
+  nauUnits: number;
+  applicationNames: string[];
+  breakdown: NauBreakdown;
+}
+
+/**
+ * Build the `sys_created_on` range query (on the MESSAGE table) for a YYYY-MM month.
+ * Returns "" when no month is supplied (all-time).
+ */
+function buildMonthMessageQuery(monthFilter?: string): string {
+  if (!monthFilter) return "";
+  const [year, month] = monthFilter.split("-").map(Number);
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const endDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+  return `sys_created_on>=${startDate}^sys_created_on<${endDate}`;
+}
+
+/** Compose a message-table encoded query: optional month range AND a content substring match. */
+function messageContentQuery(monthQuery: string, contentLike: string): string {
+  const parts = [];
+  if (monthQuery) parts.push(monthQuery);
+  parts.push(`contentLIKE${contentLike}`);
+  return parts.join("^");
+}
+
+/** Merge counts from map B into map A (in place), summing overlapping keys. */
+function mergeCounts(a: Map<string, number>, b: Map<string, number>): Map<string, number> {
+  for (const [k, v] of b) a.set(k, (a.get(k) || 0) + v);
+  return a;
+}
+
+/**
+ * Count DISTINCT conversations per user, and resolve each user's display name, in a
+ * SINGLE aggregate on the CONVERSATION table grouped by `user`.
+ *
+ * This deliberately avoids a two-level `group_by=conversation.user,conversation` on the
+ * message table: the Stats API does not guarantee that `groupby_fields[0]` is the field
+ * you listed first (the dot-walked reference lands last), so reading index [0] as "user"
+ * actually returned conversation sys_ids — inventing phantom "users".
+ *
+ * Grouping the conversation table by `user` (a single reference field) is unambiguous, and
+ * `sysparm_display_value=true` gives us the user's name straight from the same call, so the
+ * name is guaranteed to key-match the count (no fragile separate sys_user lookup).
+ *
+ * Returns Map<userSysId, { count, name }>.
+ */
+async function fetchConversationsPerUser(
+  monthQuery: string
+): Promise<Map<string, { count: number; name: string }>> {
+  const params = new URLSearchParams({
+    sysparm_count: "true",
+    sysparm_group_by: "user",
+    sysparm_display_value: "true",
+  });
+  if (monthQuery) params.set("sysparm_query", monthQuery);
+  const { result } = await request(`${STATS_BASE}/sn_build_agent_conversation?${params}`);
+  const map = new Map<string, { count: number; name: string }>();
+  if (Array.isArray(result)) {
+    for (const grp of result) {
+      const gbFields = grp.groupby_fields || [];
+      const f = gbFields[0] || {};
+      const userId = f.value || "";
+      const name = f.display_value || "";
+      const count = parseInt(grp.stats?.count ?? "0", 10) || 0;
+      if (userId) map.set(userId, { count, name });
+    }
+  }
+  return map;
+}
+
 /**
  * Fetch user consumption data for a given month (YYYY-MM format).
- * Groups conversations by user, counts USER messages only, and calculates NAU.
- * Each user message = 25 Now Assist Units.
+ *
+ * **Strategy (dot-walk–free):**
+ * 1. Fetch ALL conversations once → build `conversationId→userId` and `userId→userName` maps.
+ * 2. Count messages grouped by `conversation` (a direct FK, no dot-walking) via the Stats
+ *    API, filtered with `LIKE` substring matches on the JSON `content` field.
+ * 3. Roll up per-conversation counts to per-user counts using the map from step 1.
+ *
+ * This avoids the Stats API `groupby_fields` ordering ambiguity that occurred when
+ * grouping by the dot-walked `conversation.user`: the API does not guarantee
+ * `groupby_fields[0]` corresponds to the first path segment you listed, and the
+ * dot-walked reference often lands *last* — so code that read `[0].value` as the
+ * user sys_id sometimes received conversation sys_ids instead, creating phantom
+ * "user" rows whose names could not be resolved (displayed as raw sys_ids).
+ *
+ * Every interaction is counted regardless of whether the conversation is tied to
+ * an application scope — consumption is attributed purely by user.
+ *
+ * Each interaction (user message, install, planning, app creation, interview) = 25 NAU.
  */
 export async function fetchUserConsumption(monthFilter?: string): Promise<UserConsumptionRow[]> {
-  // Build date filter query
-  let dateQuery = "";
-  if (monthFilter) {
-    const [year, month] = monthFilter.split("-").map(Number);
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    // Compute next month
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    const endDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-    dateQuery = `sys_created_on>=${startDate}^sys_created_on<${endDate}`;
-  }
+  const monthQuery = buildMonthMessageQuery(monthFilter);
 
-  // Fetch conversations with display values for user reference
+  // ── Step 1: Build conversation→user mapping ────────────────────────────────
+  // Fetches every conversation with display_value=all so we get both the user
+  // sys_id (.value) and user name (.display_value) in a single call.
   const convoParams = new URLSearchParams({
     sysparm_display_value: "all",
-    sysparm_fields: "sys_id,user,application_name,application_id,sys_created_on",
+    sysparm_fields: "sys_id,user",
+    sysparm_limit: "10000",
   });
-  if (dateQuery) {
-    convoParams.set("sysparm_query", dateQuery + "^ORDERBYDESCsys_created_on");
-  } else {
-    convoParams.set("sysparm_query", "ORDERBYDESCsys_created_on");
-  }
-  const { result: convos } = await request(
-    `${BASE}/sn_build_agent_conversation?${convoParams}`
-  );
-  if (!convos || convos.length === 0) return [];
+  const { result: convos } = await request(`${BASE}/sn_build_agent_conversation?${convoParams}`);
 
-  // Get conversation IDs for message lookup
-  const convoIds = convos.map((c: any) => {
-    const id = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
-    return id;
-  }).filter(Boolean);
+  const convoToUser = new Map<string, string>();   // conversationId → userId
+  const userNameMap = new Map<string, string>();    // userId → display name
 
-  // Fetch messages with content field to identify user messages and tool calls
-  const userMsgByConvo = new Map<string, number>();
-  const toolByUserConvo = new Map<string, { installs: number; planning: number; appCreations: number; interviews: number }>();
-
-  // Build a convoId -> userId lookup
-  const convoToUser = new Map<string, string>();
-  convos.forEach((c: any) => {
-    const cId = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
-    const uId = typeof c.user === "string" ? c.user : c.user?.value || "";
-    if (cId && uId) convoToUser.set(cId, uId);
-  });
-
-  if (convoIds.length > 0) {
-    const msgParams = new URLSearchParams({
-      sysparm_display_value: "all",
-      sysparm_fields: "sys_id,conversation,content",
-      sysparm_query: `conversationIN${convoIds.join(",")}`,
-      sysparm_limit: "10000",
-    });
-    const { result: msgs } = await request(`${BASE}/sn_build_agent_message?${msgParams}`);
-    if (msgs) {
-      msgs.forEach((m: any) => {
-        const cId = typeof m.conversation === "string" ? m.conversation : m.conversation?.value || "";
-        const uId = convoToUser.get(cId) || "";
-        if (!uId) return;
-
-        // Count user messages
-        if (isUserMessageContent(m.content)) {
-          userMsgByConvo.set(cId, (userMsgByConvo.get(cId) || 0) + 1);
-        }
-
-        // Classify tool calls for NAU breakdown
-        const toolType = classifyToolForNau(m.content);
-        if (toolType) {
-          const key = uId;
-          const existing = toolByUserConvo.get(key) || { installs: 0, planning: 0, appCreations: 0, interviews: 0 };
-          if (toolType === "install") existing.installs++;
-          else if (toolType === "planning") existing.planning++;
-          else if (toolType === "appCreation") existing.appCreations++;
-          else if (toolType === "interview") existing.interviews++;
-          toolByUserConvo.set(key, existing);
-        }
-      });
-    }
-  }
-
-  // Group by user
-  const userMap = new Map<string, UserConsumptionRow>();
-  convos.forEach((c: any) => {
-    const userId = typeof c.user === "string" ? c.user : c.user?.value || "";
-    const userName = typeof c.user === "string" ? c.user : c.user?.display_value || userId || "Unknown";
+  for (const c of convos || []) {
     const convoId = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
-    const appName = typeof c.application_name === "string"
-      ? c.application_name
-      : c.application_name?.display_value || c.application_name?.value || "";
-
-    if (!userId) return;
-
-    const existing = userMap.get(userId) || {
-      userId,
-      userName,
-      conversations: 0,
-      userMessages: 0,
-      nauUnits: 0,
-      applicationNames: [],
-      breakdown: { userMessages: 0, installs: 0, planning: 0, appCreations: 0, interviews: 0, totalInteractions: 0, nauPerUnit: 25, totalNau: 0 },
-    };
-
-    existing.conversations += 1;
-    const convoUserMsgs = userMsgByConvo.get(convoId) || 0;
-    existing.userMessages += convoUserMsgs;
-
-    if (appName && !existing.applicationNames.includes(appName)) {
-      existing.applicationNames.push(appName);
+    const userId  = typeof c.user === "object" ? (c.user?.value || "") : (c.user || "");
+    const userName = typeof c.user === "object" ? (c.user?.display_value || "") : "";
+    if (convoId && userId) {
+      convoToUser.set(convoId, userId);
+      if (userName && !userNameMap.has(userId)) {
+        userNameMap.set(userId, userName);
+      }
     }
+  }
 
-    // Update display name if better
-    if (userName && userName !== userId && existing.userName === existing.userId) {
-      existing.userName = userName;
+  // ── Step 2: Aggregate message counts grouped by conversation ───────────────
+  // Each category is a separate Stats API call with a LIKE filter on the JSON
+  // `content` field.  install / build_install are counted separately (rather than
+  // via ^OR) to avoid encoded-query OR-precedence dropping the date filter, then
+  // merged into a single "installs" tally.
+  const GROUP = "conversation";
+
+  const [
+    userMsgByConvo,
+    installByConvo,
+    buildInstallByConvo,
+    planningByConvo,
+    appCreationByConvo,
+    interviewByConvo,
+  ] = await Promise.all([
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"sender":"user"`)),
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"toolActualName":"install"`)),
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"toolActualName":"build_install"`)),
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"toolActualName":"planning"`)),
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"toolActualName":"create_new_servicenow_app"`)),
+    fetchAggregateCountByGroup("sn_build_agent_message", GROUP, messageContentQuery(monthQuery, `"toolActualName":"interview"`)),
+  ]);
+
+  // ── Step 3: Roll up conversation-level counts → user-level counts ──────────
+  /** Sum conversation-level counts into a userId-keyed map. */
+  function rollUpToUser(convoCountMap: Map<string, number>): Map<string, number> {
+    const userMap = new Map<string, number>();
+    for (const [convoId, count] of convoCountMap) {
+      const userId = convoToUser.get(convoId);
+      if (userId) {
+        userMap.set(userId, (userMap.get(userId) || 0) + count);
+      }
     }
+    return userMap;
+  }
 
-    userMap.set(userId, existing);
+  const userMsgByUser     = rollUpToUser(userMsgByConvo);
+  const installsByUser    = mergeCounts(rollUpToUser(installByConvo), rollUpToUser(buildInstallByConvo));
+  const planningByUser    = rollUpToUser(planningByConvo);
+  const appCreationByUser = rollUpToUser(appCreationByConvo);
+  const interviewByUser   = rollUpToUser(interviewByConvo);
+
+  // Count distinct *active* conversations per user (those that had at least one
+  // message matching any metric in the selected month).
+  const activeConvos = new Set<string>();
+  for (const m of [userMsgByConvo, installByConvo, buildInstallByConvo, planningByConvo, appCreationByConvo, interviewByConvo]) {
+    for (const convoId of m.keys()) activeConvos.add(convoId);
+  }
+  const convosPerUser = new Map<string, number>();
+  for (const convoId of activeConvos) {
+    const userId = convoToUser.get(convoId);
+    if (userId) {
+      convosPerUser.set(userId, (convosPerUser.get(userId) || 0) + 1);
+    }
+  }
+
+  // ── Step 4: Collect user IDs and resolve any missing names ─────────────────
+  const userIds = new Set<string>();
+  [userMsgByUser, installsByUser, planningByUser, appCreationByUser, interviewByUser].forEach((m) => {
+    for (const k of m.keys()) userIds.add(k);
   });
+  for (const k of convosPerUser.keys()) userIds.add(k);
+  if (userIds.size === 0) return [];
 
-  // Compute breakdowns per user
-  for (const [userId, row] of userMap) {
-    const tools = toolByUserConvo.get(userId) || { installs: 0, planning: 0, appCreations: 0, interviews: 0 };
-    const totalInteractions = row.userMessages + tools.installs + tools.planning + tools.appCreations + tools.interviews;
-    row.breakdown = {
-      userMessages: row.userMessages,
-      installs: tools.installs,
-      planning: tools.planning,
-      appCreations: tools.appCreations,
-      interviews: tools.interviews,
+  const unresolved = Array.from(userIds).filter((id) => !userNameMap.has(id));
+  if (unresolved.length > 0) {
+    const resolved = await fetchUserNames(unresolved);
+    for (const [id, name] of resolved) userNameMap.set(id, name);
+  }
+
+  // ── Step 5: Build result rows ──────────────────────────────────────────────
+  const rows: UserConsumptionRow[] = [];
+  for (const userId of userIds) {
+    const userMessages = userMsgByUser.get(userId) || 0;
+    const installs     = installsByUser.get(userId) || 0;
+    const planning     = planningByUser.get(userId) || 0;
+    const appCreations = appCreationByUser.get(userId) || 0;
+    const interviews   = interviewByUser.get(userId) || 0;
+    const totalInteractions = userMessages + installs + planning + appCreations + interviews;
+
+    const breakdown: NauBreakdown = {
+      userMessages,
+      installs,
+      planning,
+      appCreations,
+      interviews,
       totalInteractions,
       nauPerUnit: 25,
       totalNau: totalInteractions * 25,
     };
-    row.nauUnits = row.breakdown.totalNau;
+
+    rows.push({
+      userId,
+      userName: userNameMap.get(userId) || userId,
+      conversations: convosPerUser.get(userId) || 0,
+      userMessages,
+      nauUnits: breakdown.totalNau,
+      applicationNames: [],
+      breakdown,
+    });
   }
 
-  return Array.from(userMap.values());
+  return rows;
 }
 
 /**

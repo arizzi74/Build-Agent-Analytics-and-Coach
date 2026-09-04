@@ -28,13 +28,33 @@ declare global {
                         id: '28c9ea843bca0b949a1600b693e45af2'
                         deleted: true
                     }
+                    '2a84c5722fc34310cebb654fafa4e3c4': {
+                        table: 'sys_scope_privilege'
+                        id: '2a84c5722fc34310cebb654fafa4e3c4'
+                    }
+                    '3e84c5722fc34310cebb654fafa4e3ce': {
+                        table: 'sys_scope_privilege'
+                        id: '3e84c5722fc34310cebb654fafa4e3ce'
+                    }
                     '491fddb20fea4310083782d300d1b2a0': {
                         table: 'sys_scope_privilege'
                         id: '491fddb20fea4310083782d300d1b2a0'
                     }
+                    '5e84c5722fc34310cebb654fafa4e39a': {
+                        table: 'sys_scope_privilege'
+                        id: '5e84c5722fc34310cebb654fafa4e39a'
+                    }
+                    '6e84c5722fc34310cebb654fafa4e3a3': {
+                        table: 'sys_scope_privilege'
+                        id: '6e84c5722fc34310cebb654fafa4e3a3'
+                    }
                     activity_heatmap_card_widget: {
                         table: 'sys_aix_widget'
                         id: 'f2b02b26bb7847a5b2d5ccea1532d529'
+                    }
+                    ae84c5722fc34310cebb654fafa4e3a8: {
+                        table: 'sys_scope_privilege'
+                        id: 'ae84c5722fc34310cebb654fafa4e3a8'
                     }
                     analytics_navigator_agent: {
                         table: 'sn_aia_agent'
@@ -74,6 +94,14 @@ declare global {
                         id: 'e538a6cc3b8a0b949a1600b693e45a68'
                         deleted: true
                     }
+                    e684c5722fc34310cebb654fafa4e3bf: {
+                        table: 'sys_scope_privilege'
+                        id: 'e684c5722fc34310cebb654fafa4e3bf'
+                    }
+                    ee84c5722fc34310cebb654fafa4e3ad: {
+                        table: 'sys_scope_privilege'
+                        id: 'ee84c5722fc34310cebb654fafa4e3ad'
+                    }
                     f60a72483b424b949a1600b693e45ac3: {
                         table: 'sys_openapi_operation'
                         id: 'f60a72483b424b949a1600b693e45ac3'
@@ -82,6 +110,10 @@ declare global {
                     f837e13a0f2e4310083782d300d1b25f: {
                         table: 'sys_scope_privilege'
                         id: 'f837e13a0f2e4310083782d300d1b25f'
+                    }
+                    fa84c5722fc34310cebb654fafa4e3c9: {
+                        table: 'sys_scope_privilege'
+                        id: 'fa84c5722fc34310cebb654fafa4e3c9'
                     }
                     nau_consumption_chart_widget: {
                         table: 'sys_aix_widget'

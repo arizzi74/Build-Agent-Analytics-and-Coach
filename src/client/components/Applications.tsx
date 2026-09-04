@@ -7,6 +7,7 @@ import {
   fetchAppDetails,
   fetchTableCount,
   fetchDistinctCount,
+  fetchTotalNauConsumed,
 } from "../services/api.ts";
 import { useQueryTracker } from "../services/queryTracker.ts";
 import { SkeletonApplicationsView } from "./Skeleton.tsx";
@@ -53,7 +54,8 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   const [kpiConversations, setKpiConversations] = useState<number>(0);
   const [kpiMessages, setKpiMessages] = useState<number>(0);
   const [kpiApps, setKpiApps] = useState<number>(0);
-  const [kpiCheckpoints, setKpiCheckpoints] = useState<number>(0);
+  const [kpiNau, setKpiNau] = useState<number>(0);
+  const [kpiUsers, setKpiUsers] = useState<number>(0);
   const [kpiLoading, setKpiLoading] = useState(true);
 
   const [sortKey, setSortKey] = useState<string>("lastActivityRaw");
@@ -72,16 +74,18 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   async function loadKpis() {
     setKpiLoading(true);
     try {
-      const [convos, msgs, apps, chks] = await Promise.all([
+      const [convos, msgs, apps, nau, users] = await Promise.all([
         track("Counting conversations", () => fetchTableCount("sn_build_agent_conversation")),
         track("Counting messages", () => fetchTableCount("sn_build_agent_message")),
         track("Counting apps", () => fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY")),
-        track("Counting checkpoints", () => fetchTableCount("sn_build_agent_checkpoint")),
+        track("Counting NAU consumed", () => fetchTotalNauConsumed()),
+        track("Counting users", () => fetchDistinctCount("sn_build_agent_conversation", "user", "userISNOTEMPTY")),
       ]);
       setKpiConversations(convos);
       setKpiMessages(msgs);
       setKpiApps(apps);
-      setKpiCheckpoints(chks);
+      setKpiNau(nau);
+      setKpiUsers(users);
     } catch (e) {
       console.error("KPI load error:", e);
     } finally {
@@ -105,9 +109,14 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     setKpiApps(count);
   }, []);
 
-  const refreshCheckpoints = useCallback(async () => {
-    const count = await fetchTableCount("sn_build_agent_checkpoint");
-    setKpiCheckpoints(count);
+  const refreshNau = useCallback(async () => {
+    const count = await fetchTotalNauConsumed();
+    setKpiNau(count);
+  }, []);
+
+  const refreshUsers = useCallback(async () => {
+    const count = await fetchDistinctCount("sn_build_agent_conversation", "user", "userISNOTEMPTY");
+    setKpiUsers(count);
   }, []);
 
   const toggleFavorite = useCallback((appId: string, e: React.MouseEvent) => {
@@ -294,10 +303,16 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
           onRefresh={refreshApps}
         />
         <KpiCard
-          title="Checkpoints"
-          value={kpiCheckpoints}
+          title="Now Assist Units"
+          value={kpiNau}
           loading={kpiLoading}
-          onRefresh={refreshCheckpoints}
+          onRefresh={refreshNau}
+        />
+        <KpiCard
+          title="Total Users"
+          value={kpiUsers}
+          loading={kpiLoading}
+          onRefresh={refreshUsers}
         />
       </div>
       <div className="ba-search">
