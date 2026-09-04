@@ -20,6 +20,7 @@ import "./styles/consumption.css";
 import "./styles/user-profile.css";
 import "./styles/json-tree.css";
 import "./styles/loading.css";
+import "./styles/run-script.css";
 import "./styles/responsive.css";
 
 declare const window: any;

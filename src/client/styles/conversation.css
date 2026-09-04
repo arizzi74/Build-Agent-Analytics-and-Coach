@@ -621,6 +621,24 @@
   color: var(--ba-text-muted);
 }
 
+/* External tool (server__tool split) */
+.tool-details__ext-server {
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--ba-radius-pill);
+  background: linear-gradient(135deg, #dbeafe, #ede9fe);
+  color: #4338ca;
+  font-family: var(--ba-font-mono);
+  letter-spacing: 0.02em;
+}
+
+.tool-details__ext-arrow {
+  font-size: 0.625rem;
+  color: var(--ba-text-muted);
+  font-weight: 400;
+}
+
 .tool-details__result-content {
   margin-top: var(--ba-space-2);
   font-size: 0.625rem;

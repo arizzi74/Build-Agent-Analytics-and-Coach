@@ -8,6 +8,7 @@ import type { ConversationTokenUsage, MessageTokenInfo } from "../utils/tokenEst
 import KpiCard from "./KpiCard.tsx";
 import MarkdownRenderer from "./MarkdownRenderer.tsx";
 import { NauBreakdownPanel } from "./NauBreakdown.tsx";
+import RunScriptModal from "./RunScriptModal.tsx";
 
 interface ConversationDetailProps {
   conversationId: string;
@@ -151,14 +152,26 @@ function formatDuration(ms: number): string {
 }
 
 /** Get the category for a tool to decide what to show */
-function getToolCategory(name: string): "filesystem" | "query" | "build" | "docs" | "planning" | "agent" | "other" {
+function getToolCategory(name: string): "filesystem" | "query" | "build" | "docs" | "planning" | "agent" | "script" | "external" | "other" {
   if (name.startsWith("fs_") || name === "local_search") return "filesystem";
   if (["run_query", "keyword_search", "semantic_search", "get_table_schema"].includes(name)) return "query";
   if (["build", "install", "run_diagnostics", "install_dependencies", "ui_diagnostics"].includes(name)) return "build";
   if (["explain_fluent_doc", "search_fluent_docs", "get_knowledge_source", "package_docs"].includes(name)) return "docs";
   if (["planning", "interview"].includes(name)) return "planning";
   if (name === "agent") return "agent";
+  if (["run_script", "rollback_script"].includes(name)) return "script";
+  if (name.includes("__")) return "external";
   return "other";
+}
+
+/** Parse an external tool name (server__tool pattern) into server and tool parts */
+function parseExternalToolName(name: string): { server: string; tool: string } | null {
+  const idx = name.indexOf("__");
+  if (idx <= 0) return null;
+  return {
+    server: name.slice(0, idx),
+    tool: name.slice(idx + 2),
+  };
 }
 
 /** Get key input fields to display based on tool type */
@@ -212,6 +225,18 @@ function getToolInputDisplay(name: string, input: Record<string, any>): Array<{ 
       if (input.name) fields.push({ label: "Name", value: input.name });
       if (input.prompt) fields.push({ label: "Prompt", value: truncateStr(input.prompt, 100) });
       break;
+    case "script":
+      if (input.intent) fields.push({ label: "Intent", value: truncateStr(input.intent, 120) });
+      if (input.scope) fields.push({ label: "Scope", value: input.scope });
+      break;
+    case "external": {
+      // Show all input params generically (up to 6)
+      Object.entries(input).slice(0, 6).forEach(([k, v]) => {
+        const val = typeof v === "string" ? truncateStr(v, 80) : JSON.stringify(v).slice(0, 80);
+        fields.push({ label: k, value: val });
+      });
+      break;
+    }
     default:
       // For unknown tools, show all keys as-is (up to 5)
       Object.entries(input).slice(0, 5).forEach(([k, v]) => {
@@ -392,10 +417,13 @@ function ToolResultModal({ toolName, result, onClose }: { toolName: string; resu
 /** Render tool details: inputs, status, duration, modal result */
 function ToolDetailsView({ details }: { details: ToolDetails }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [rsModalOpen, setRsModalOpen] = useState(false);
   const { toolActualName, toolInput, success, duration, result } = details;
 
   const inputFields = getToolInputDisplay(toolActualName, toolInput);
   const category = getToolCategory(toolActualName);
+  const isRunScript = toolActualName === "run_script";
+  const externalParts = category === "external" ? parseExternalToolName(toolActualName) : null;
 
   // Category-based icons
   const categoryIcons: Record<string, string> = {
@@ -405,6 +433,8 @@ function ToolDetailsView({ details }: { details: ToolDetails }) {
     docs: "📖",
     planning: "📋",
     agent: "🤖",
+    script: "⚡",
+    external: "🔌",
     other: "⚡",
   };
 
@@ -418,7 +448,15 @@ function ToolDetailsView({ details }: { details: ToolDetails }) {
           {success ? "✓" : "✗"}
         </span>
         <span className="tool-details__category-icon">{categoryIcons[category]}</span>
-        <code className="tool-details__name">{toolActualName}</code>
+        {externalParts ? (
+          <>
+            <span className="tool-details__ext-server">{externalParts.server}</span>
+            <span className="tool-details__ext-arrow">→</span>
+            <code className="tool-details__name">{externalParts.tool}</code>
+          </>
+        ) : (
+          <code className="tool-details__name">{toolActualName}</code>
+        )}
         {duration > 0 && (
           <span className="tool-details__duration">{formatDuration(duration)}</span>
         )}
@@ -440,8 +478,20 @@ function ToolDetailsView({ details }: { details: ToolDetails }) {
         </div>
       )}
 
-      {/* Result — opens modal */}
-      {result && resultLength > 0 && (
+      {/* run_script special trigger */}
+      {isRunScript && toolInput.script && (
+        <button
+          className="rs-trigger"
+          onClick={() => setRsModalOpen(true)}
+          type="button"
+        >
+          <span className="rs-trigger__icon">⚡</span>
+          <span>View Script &amp; Result</span>
+        </button>
+      )}
+
+      {/* Result — opens modal (for non-run_script tools) */}
+      {!isRunScript && result && resultLength > 0 && (
         <div className="tool-details__result">
           <button
             className="tool-details__result-toggle"
@@ -455,9 +505,22 @@ function ToolDetailsView({ details }: { details: ToolDetails }) {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Generic result modal */}
       {modalOpen && result && (
         <ToolResultModal toolName={toolActualName} result={result} onClose={() => setModalOpen(false)} />
+      )}
+
+      {/* RunScript modal */}
+      {rsModalOpen && isRunScript && (
+        <RunScriptModal
+          script={toolInput.script || ""}
+          result={result || ""}
+          intent={toolInput.intent}
+          scope={toolInput.scope}
+          success={success}
+          duration={duration}
+          onClose={() => setRsModalOpen(false)}
+        />
       )}
     </div>
   );
