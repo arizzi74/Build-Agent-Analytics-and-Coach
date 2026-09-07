@@ -5,7 +5,7 @@ import { formatImplDuration, getImplMinutes, calculateDurationMetrics, formatDur
 import type { DurationMetrics } from "../utils/workingDuration.ts";
 import { fetchConversations, fetchMessages, fetchCheckpoints, fetchAppNames, fetchAppComposition, fetchSettings, saveSettings } from "../services/api.ts";
 import type { AppComposition, ComponentItem } from "../services/api.ts";
-import { analyzeConversation, aggregateApplicationUsage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
+import { analyzeConversation, aggregateApplicationUsage, formatTokenCount } from "../utils/tokenEstimation.ts";
 import type { ConversationTokenUsage, ApplicationTokenUsage } from "../utils/tokenEstimation.ts";
 import {
   calculateComplexity,
@@ -378,10 +378,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
   const nowAssistUnits = totalUser * NOWASSIST_UNIT_COST;
 
-  const tokenTooltip = appTokenUsage && appTokenUsage.total > 0
-    ? `input: ~${formatTokenCount(appTokenUsage.input)} · output: ~${formatTokenCount(appTokenUsage.output)} · thinking: ~${formatTokenCount(appTokenUsage.thinking)}`
-    : undefined;
-
   // Complexity & ROI calculations
   const complexScore = composition ? calculateComplexity(composition, weights) : 0;
   const complexLabel = composition ? complexityLabel(complexScore) : null;
@@ -430,13 +426,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
       <div className="ba-kpi-row">
         <KpiCard title="User Messages" value={totalUser} icon="user" onClick={() => setKpiInfoKey("user")} />
         <KpiCard title="Assistant Messages" value={totalAssistant} icon="assistant" onClick={() => setKpiInfoKey("assistant")} />
-        <KpiCard
-          title="Tokens"
-          value={appTokenUsage ? formatEstimate(appTokenUsage.total) : "—"}
-          icon="tokens"
-          tooltip={tokenTooltip}
-          onClick={() => setKpiInfoKey("tokens")}
-        />
         <KpiCard title="Impl. Duration" value={implDuration || "—"} icon="duration" onClick={() => setKpiInfoKey("duration")} />
         <KpiCard
           title="NowAssist Units"
@@ -662,6 +651,35 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
       {/* KPI Info Modal */}
       {kpiInfoKey && KPI_DESCRIPTIONS[kpiInfoKey] && (() => {
         const info: KpiInfo = { ...KPI_DESCRIPTIONS[kpiInfoKey] };
+        // Inject token consumption detail metrics into the NowAssist Units KPI modal
+        if (kpiInfoKey === "cost" && appTokenUsage && appTokenUsage.total > 0) {
+          info.details = [
+            {
+              icon: "🔢",
+              label: "Token Totali",
+              value: `~${formatTokenCount(appTokenUsage.total)}`,
+              tooltip: "Stima dei token totali (input + output + thinking) consumati per la produzione dell'applicazione",
+            },
+            {
+              icon: "⬇️",
+              label: "Input",
+              value: `~${formatTokenCount(appTokenUsage.input)}`,
+              tooltip: "Token del messaggio utente e del contesto inviati all'LLM",
+            },
+            {
+              icon: "⬆️",
+              label: "Output",
+              value: `~${formatTokenCount(appTokenUsage.output)}`,
+              tooltip: "Token generati dall'agente nelle risposte",
+            },
+            {
+              icon: "💭",
+              label: "Thinking",
+              value: `~${formatTokenCount(appTokenUsage.thinking)}`,
+              tooltip: "Token usati per i ragionamenti interni dell'agente",
+            },
+          ];
+        }
         // Inject duration detail metrics when showing the duration KPI
         if (kpiInfoKey === "duration" && durationMetrics) {
           info.details = [

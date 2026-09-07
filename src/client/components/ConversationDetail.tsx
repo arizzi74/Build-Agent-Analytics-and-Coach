@@ -9,6 +9,7 @@ import KpiCard from "./KpiCard.tsx";
 import MarkdownRenderer from "./MarkdownRenderer.tsx";
 import { NauBreakdownPanel } from "./NauBreakdown.tsx";
 import RunScriptModal from "./RunScriptModal.tsx";
+import { exportConversationAsHtml } from "../utils/conversationExport.ts";
 
 interface ConversationDetailProps {
   conversationId: string;
@@ -838,15 +839,36 @@ export default function ConversationDetail({
   const backId = appId || undefined;
   const backLabel = appId ? "← Back to Application" : "← Back to Applications";
 
+  function handleExport() {
+    exportConversationAsHtml({
+      conversation,
+      messages,
+      userCount,
+      assistantCount,
+      tokenUsage,
+      nauBreakdown,
+    });
+  }
+
   return (
     <div className="ba-view">
-      <button
-        className="ba-back-btn"
-        onClick={() => onNavigate(backTarget, backId)}
-        type="button"
-      >
-        {backLabel}
-      </button>
+      <div className="ba-header-row">
+        <button
+          className="ba-back-btn"
+          onClick={() => onNavigate(backTarget, backId)}
+          type="button"
+        >
+          {backLabel}
+        </button>
+        <button
+          className="ba-export-btn"
+          onClick={handleExport}
+          type="button"
+          title="Export conversation as printable HTML / PDF"
+        >
+          🖨️ Export / Print
+        </button>
+      </div>
       <h1 className="ba-view__title">{display(conversation.title) || "Untitled"}</h1>
       <p className="ba-view__subtitle" style={{ margin: "0.25rem 0 0.75rem 0" }}>
         <span style={{

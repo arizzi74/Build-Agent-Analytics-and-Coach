@@ -106,8 +106,8 @@ export const KPI_DESCRIPTIONS: Record<string, KpiInfo> = {
     icon: "💎",
     title: "NowAssist Units",
     description:
-      "Stima delle unità NowAssist consumate per questa applicazione. Le unità NowAssist rappresentano il costo di utilizzo della piattaforma AI di ServiceNow.",
+      "Stima delle unità NowAssist consumate per questa applicazione. Le unità NowAssist rappresentano il costo di utilizzo della piattaforma AI di ServiceNow. Nel dettaglio qui sotto trovi anche i token consumati (input, output e thinking) per la produzione dell'applicazione.",
     methodology:
-      "Ogni messaggio dell'utente consuma 25 NowAssist Units (costante fissa). Il calcolo è: numero_messaggi_utente × 25 = unità totali. Questo valore è una stima basata sul pricing standard; il consumo effettivo può variare in base al contratto.",
+      "Ogni messaggio dell'utente consuma 25 NowAssist Units (costante fissa). Il calcolo è: numero_messaggi_utente × 25 = unità totali. Questo valore è una stima basata sul pricing standard; il consumo effettivo può variare in base al contratto. La stima dei token si basa invece sulla lunghezza in caratteri di ogni messaggio (~4 caratteri per token), suddivisa tra input, output e thinking.",
   },
 };
