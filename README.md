@@ -2,7 +2,7 @@
 
 Dashboard analytics application for visualizing **Build Agent** usage statistics — including conversations, messages, checkpoints, application compositions, token consumption, NAU (Now Assist Units) tracking, per-user profiling, time-series analysis, and agent performance metrics.
 
-Built on ServiceNow using the **Now SDK Fluent DSL** (v4.12.1) with a React-based UI Page (SPA).
+Built on ServiceNow using the **Now SDK Fluent DSL** (v4.13.3) with a React-based UI Page (SPA).
 
 ---
 
@@ -53,7 +53,7 @@ The top navigation exposes three tabs — **Applications**, **Consumption**, **P
 | Rendering | [marked](https://github.com/markedjs/marked) 12.0.2 (Markdown), [mermaid](https://mermaid.js.org/) 10.9.3 (diagrams) |
 | Charts | Pure SVG (no charting library) |
 | Platform | ServiceNow (Table API, Aggregate/Stats API, UI Page) |
-| SDK | `@servicenow/sdk` 4.12.1 (Fluent DSL), `@servicenow/glide` 27.0.5 |
+| SDK | `@servicenow/sdk` 4.13.3 (Fluent DSL), `@servicenow/glide` 27.0.5 |
 
 ---
 
@@ -321,6 +321,10 @@ npx tsc --project src/client/tsconfig.json --noEmit
 ```
 
 Fluent metadata files (`.now.ts`) live under `src/fluent/` and are compiled into platform artifacts during the build step.
+
+The files under `src/fluent/generated/` are **committed on purpose** — they are the records this app legitimately owns (cross-scope privileges and the Navigator AI Agent), and together with `keys.ts` and the `sys_metadata_delete` tombstones they keep each record's `sys_id` stable across builds and propagate deletions to target instances; never delete them by hand.
+
+Beware that anything created from the UI while `x_snc_build_agranx` is the active application is captured into this scope and will ship with the app: to move such a record out while keeping it on the instance, reassign its `sys_package`/`sys_scope` to Global **first**, then delete its generated `.now.ts` — doing it in the reverse order deletes the record.
 
 ### Key Architecture Decisions
 
