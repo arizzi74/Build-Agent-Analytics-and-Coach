@@ -86,13 +86,6 @@ export function isUserMessage(sender: MessageSender): boolean {
 }
 
 /**
- * Determines if a sender type is from the assistant (any variant).
- */
-export function isAssistantMessage(sender: MessageSender): boolean {
-  return sender === "assistant" || sender === "assistant-thinking" || sender === "assistant-tool";
-}
-
-/**
  * Counts messages by sender type from an array of message records.
  */
 export function countMessagesBySender(messages: any[]): { user: number; assistant: number; total: number } {
@@ -110,19 +103,6 @@ export function countMessagesBySender(messages: any[]): { user: number; assistan
   return { user, assistant, total: user + assistant };
 }
 
-/**
- * Returns a human-friendly label for a sender type.
- */
-export function senderLabel(sender: MessageSender): string {
-  switch (sender) {
-    case "user": return "User";
-    case "assistant": return "Assistant";
-    case "assistant-thinking": return "Thinking";
-    case "assistant-tool": return "Tool Call";
-    default: return "Unknown";
-  }
-}
-
 // ─── NAU Breakdown ─────────────────────────────────────────────────────────────
 
 export interface NauBreakdown {
@@ -134,27 +114,6 @@ export interface NauBreakdown {
   totalInteractions: number; // sum of all above
   nauPerUnit: number;        // 25
   totalNau: number;          // totalInteractions * 25
-}
-
-/**
- * Classify an assistant-tool message by its tool type for NAU breakdown.
- * Returns the category or null if not a NAU-relevant tool.
- */
-export function classifyToolForNau(contentField: any): "install" | "planning" | "appCreation" | "interview" | null {
-  const raw = typeof contentField === "string" ? contentField : contentField?.value || "";
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed.sender !== "assistant-tool") return null;
-    const toolName = parsed.toolActualName || "";
-    if (toolName === "install" || toolName === "build_install") return "install";
-    if (toolName === "planning") return "planning";
-    if (toolName === "create_new_servicenow_app") return "appCreation";
-    if (toolName === "interview") return "interview";
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**

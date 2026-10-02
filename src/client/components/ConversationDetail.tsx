@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { display, value, parseMessageContent, senderLabel, countMessagesBySender, computeNauBreakdown } from "../utils/fields.ts";
+import { display, value, parseMessageContent, countMessagesBySender, computeNauBreakdown } from "../utils/fields.ts";
 import type { ToolDetails, FileAttachment, NauBreakdown } from "../utils/fields.ts";
 import { fetchConversation, fetchMessages } from "../services/api.ts";
 import { analyzeConversation, analyzeMessage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
@@ -761,16 +761,39 @@ function UserBubble({ text, images, files, tokenInfo, messageSearch }: {
   );
 }
 
+/**
+ * Memoized highlight RegExp: `highlightText` runs once per rendered message, so
+ * without this cache a brand new RegExp was compiled for every message on every
+ * keystroke. The cache is keyed on the raw query, so the produced pattern is
+ * byte-for-byte the one the old inline `new RegExp(...)` built.
+ *
+ * Reusing a /g/ RegExp across `String.prototype.split` calls is safe: split
+ * internally clones the regex (per spec) and never mutates `lastIndex` on the
+ * instance handed to it.
+ */
+let highlightCacheQuery: string | null = null;
+let highlightCacheRegex: RegExp | null = null;
+
+function getHighlightRegex(query: string): RegExp {
+  if (highlightCacheRegex === null || highlightCacheQuery !== query) {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    highlightCacheRegex = new RegExp(`(${escaped})`, "gi");
+    highlightCacheQuery = query;
+  }
+  return highlightCacheRegex;
+}
+
 /** Highlight matching text within a string */
 function highlightText(text: string, query: string): React.ReactNode {
   if (!query.trim()) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`(${escaped})`, "gi");
+  const regex = getHighlightRegex(query);
   const parts = text.split(regex);
+  // Hoisted out of the map: the comparison target is constant for the whole call.
+  const lowerQuery = query.toLowerCase();
   return (
     <>
       {parts.map((part, i) =>
-        part.toLowerCase() === query.toLowerCase() ? (
+        part.toLowerCase() === lowerQuery ? (
           <mark key={i} className="ba-highlight">{part}</mark>
         ) : (
           <span key={i}>{part}</span>
@@ -826,12 +849,37 @@ export default function ConversationDetail({
     }
   }
 
+  // --- Memoized derivations -------------------------------------------------
+  // These hooks MUST stay above the early returns below, otherwise the hook
+  // order would differ between the loading and the loaded render.
+
+  // groupMessages() runs JSON.parse per message (parseMessageContent) plus a
+  // token estimate (analyzeMessage). It only depends on the fetched messages,
+  // so typing in the search box no longer re-parses the whole conversation.
+  const conversationItems = useMemo(() => groupMessages(messages), [messages]);
+
+  // Search term lowercased once instead of once per item per render. Empty
+  // string when the query is blank, which mirrors the old `messageSearch.trim()`
+  // guards exactly (note: not trimmed otherwise, same as before).
+  const messageSearchLower = useMemo(
+    () => (messageSearch.trim() ? messageSearch.toLowerCase() : ""),
+    [messageSearch]
+  );
+
+  // Result counter shown above the chat: depends on the parsed items and the
+  // query, never on unrelated re-renders (e.g. opening a tool result modal).
+  const searchMatchCount = useMemo(() => {
+    if (!messageSearchLower) return 0;
+    return conversationItems.filter((item) => {
+      if (item.type === "behind-the-scenes") return false;
+      return item.text?.toLowerCase().includes(messageSearchLower);
+    }).length;
+  }, [conversationItems, messageSearchLower]);
+
   if (loading) return <div className="ba-loading">Loading conversation...</div>;
   if (!conversation) return <div className="ba-empty">Conversation not found</div>;
 
   const nowAssistUnits = nauBreakdown ? nauBreakdown.totalNau : userCount * NOWASSIST_UNIT_COST;
-
-  const conversationItems = groupMessages(messages);
 
   // Determine back navigation based on whether we know the app
   const appId = value(conversation.application_id);
@@ -957,20 +1005,19 @@ export default function ConversationDetail({
             </button>
           )}
         </div>
-        {messageSearch.trim() && (
+        {messageSearchLower && (
           <div className="ba-search__results-count">
-            {conversationItems.filter((item) => {
-              if (item.type === "behind-the-scenes") return false;
-              return item.text?.toLowerCase().includes(messageSearch.toLowerCase());
-            }).length} message(s) found
+            {searchMatchCount} message(s) found
           </div>
         )}
         <div className="chat-container">
           {conversationItems.map((item, idx) => {
-            // When searching, filter to only show matching user/assistant messages
-            if (messageSearch.trim()) {
+            // When searching, filter to only show matching user/assistant messages.
+            // Kept as an in-place map + null return (instead of pre-filtering the
+            // array) so the `key={idx}` values stay identical to before.
+            if (messageSearchLower) {
               if (item.type === "behind-the-scenes") return null;
-              if (!item.text?.toLowerCase().includes(messageSearch.toLowerCase())) return null;
+              if (!item.text?.toLowerCase().includes(messageSearchLower)) return null;
             }
 
             if (item.type === "behind-the-scenes") {

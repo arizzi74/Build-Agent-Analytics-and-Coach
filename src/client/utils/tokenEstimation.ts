@@ -188,14 +188,3 @@ export function formatTokenCount(count: number): string {
 export function formatEstimate(count: number): string {
   return `~${formatTokenCount(count)}`;
 }
-
-/**
- * Format a bucket label for display.
- */
-export function bucketLabel(bucket: "input" | "output" | "thinking"): string {
-  switch (bucket) {
-    case "input": return "input";
-    case "output": return "output";
-    case "thinking": return "thinking";
-  }
-}

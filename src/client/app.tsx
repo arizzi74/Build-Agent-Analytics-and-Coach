@@ -9,6 +9,7 @@ import UserConsumption from "./components/UserConsumption.tsx";
 import UserProfile from "./components/UserProfile.tsx";
 import LoadingModal from "./components/LoadingModal.tsx";
 import { QueryTrackerContext, useQueryTrackerState } from "./services/queryTracker.ts";
+import { useTruncationWarnings, clearTruncationWarnings } from "./services/truncation.ts";
 import "./styles/base.css";
 import "./styles/shared.css";
 import "./styles/applications.css";
@@ -43,6 +44,7 @@ function getViewFromUrl(): ViewState {
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>(getViewFromUrl);
   const trackerState = useQueryTrackerState();
+  const truncationWarnings = useTruncationWarnings();
 
   useEffect(() => {
     const onPopState = () => setCurrentView(getViewFromUrl());
@@ -53,6 +55,9 @@ export default function App() {
   const navigateToView = useCallback(
     (viewName: string, id?: string | null, month?: string | null) => {
       trackerState.reset();
+      // Warnings describe the data of the view we are leaving — drop them here,
+      // consistently with how the query tracker is reset.
+      clearTruncationWarnings();
 
       const params = new URLSearchParams({ view: viewName });
       if (id) params.set("id", id);
@@ -112,7 +117,24 @@ export default function App() {
     <QueryTrackerContext.Provider value={trackerState}>
       <div className="ba-app">
         <Navigation currentView={view} onNavigate={(v) => navigateToView(v)} />
-        <main className="ba-main">{renderView()}</main>
+        <main className="ba-main">
+          {truncationWarnings.length > 0 && (
+            <div className="ba-truncation-banner" role="status" aria-live="polite">
+              <span className="ba-truncation-banner__icon" aria-hidden="true">⚠️</span>
+              <span className="ba-truncation-banner__text">
+                The data shown is <strong>partial</strong>: one or more queries hit
+                their configured record limit.{" "}
+                <span className="ba-truncation-banner__contexts">
+                  Affected queries:{" "}
+                  {truncationWarnings
+                    .map((w) => `${w.label} (limit ${w.limit})`)
+                    .join(" · ")}
+                </span>
+              </span>
+            </div>
+          )}
+          {renderView()}
+        </main>
       </div>
       <LoadingModal />
     </QueryTrackerContext.Provider>

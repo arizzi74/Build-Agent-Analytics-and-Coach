@@ -2,7 +2,7 @@
 
 Dashboard analytics application for visualizing **Build Agent** usage statistics — including conversations, messages, checkpoints, application compositions, token consumption, NAU (Now Assist Units) tracking, per-user profiling, time-series analysis, and agent performance metrics.
 
-Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based UI Page (SPA).
+Built on ServiceNow using the **Now SDK Fluent DSL** (v4.12.1) with a React-based UI Page (SPA).
 
 ---
 
@@ -14,99 +14,34 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 
 | View | Description |
 |------|-------------|
-| **Applications** | Lists all applications touched by Build Agent, with conversation/checkpoint counts, metadata composition scanning (24 component types), complexity scoring, and ROI estimates |
-| **App Detail** | Deep dive into a single application — full metadata composition with deep-links, related conversations, implementation duration, and partner-hour savings calculator |
-| **Conversation Detail** | Full conversation thread with messages (user, assistant, thinking, tool calls), checkpoints, change summaries, and Markdown/Mermaid rendering |
-| **Consumption** | Monthly NAU consumption per user (25 NAU per user message), with month navigation, search, and drill-down to individual user profiles |
+| **Applications** | Lists all applications touched by Build Agent, with conversation/checkpoint counts, global KPI cards, and search |
+| **App Detail** | Deep dive into a single application — full metadata composition with deep-links, related conversations, usage by author, implementation duration, and partner-hour savings calculator |
+| **Conversation Detail** | Full conversation thread with messages (user, assistant, thinking, tool calls), token usage, NAU breakdown, message search, Markdown/Mermaid rendering, and **export to printable HTML/PDF** |
+| **Consumption** | Monthly NAU consumption per user, with month navigation, search, and drill-down to individual user profiles |
 | **User Profile** | Individual user analytics — donut chart of top 5 apps, per-app breakdown table, daily activity timeline bar chart, and lifetime KPIs |
-| **Performance** | Agent-level KPIs — task telemetry, build-fix cycles, error rates, working duration breakdowns |
-| **TimeSeries** | Per-application daily token consumption and message volume over time, with dual-axis SVG line chart and client-side caching |
+| **Performance** | Agent-level KPIs — task telemetry, build-fix cycles, and tool error rates |
+| **TimeSeries** | Per-application daily token consumption and message volume over time, with dual-axis SVG line chart and server-side caching |
+
+The top navigation exposes three tabs — **Applications**, **Consumption**, **Performance**. Three further views (App Detail, Conversation Detail, User Profile) are reached by drill-down and are deep-linkable via URL parameters. **TimeSeries** has no drill-down entry point today: it is only reachable via the deep-link `?view=timeseries`.
 
 ### Additional Capabilities
 
-- **KPI Cards** — at-a-glance metrics with refresh actions and loading states
+- **Conversation Export (PDF)** — generates a self-contained HTML transcript (cover page, KPI summary, token usage, NAU breakdown, full message thread with attachments, thinking steps and tool calls) opened in a new tab and print-optimized for A4
+- **Run Script Viewer** — dedicated modal for `run_script` tool calls, showing the executed script and its result side by side with copy-to-clipboard (read-only; it never re-executes anything)
+- **KPI Cards & Info Modals** — at-a-glance metrics, each card clickable to reveal what the KPI means, how it is calculated, and its detail breakdown
 - **DataTable** — reusable sortable/expandable table component with row click navigation
 - **Build Error Display** — structured visualization of build errors and fix cycles
 - **Markdown & Mermaid Rendering** — rich content display for agent messages and summaries
-- **Per-user Settings** — persistent user preferences stored in a custom table
-- **Complexity Scoring** — weighted heuristic estimation of application complexity across 24 metadata types
+- **Live Query Telemetry** — every API call is wrapped in a tracker that reports label, status and elapsed time in a loading modal, so slow queries are visible while a view loads
+- **Skeleton Loading** — per-view skeleton placeholders (KPI rows, tables, headers) while data resolves
+- **Per-user Settings** — complexity weights and partner-hour estimates persisted per user in a custom table
+- **Complexity Scoring** — weighted heuristic estimation of application complexity across 24 metadata types, with user-editable weights
 - **ROI / Partner-Hour Estimates** — calculates manual development hours saved by Build Agent
-- **Token Estimation** — approximate token usage from conversation content, bucketed into input/output/thinking
-- **Implementation Duration** — computes actual interaction time from user message intervals
-- **App Composition Scanner** — scans 24 metadata types per application with deep-link URLs to each record
+- **Token Estimation** — approximate token usage from message content, bucketed into input/output/thinking
+- **Implementation Duration** — computes actual interaction time from turn-based message intervals, plus wall-clock, average interaction and average pause metrics
+- **App Composition Scanner** — scans 24 metadata types per application with deep-link URLs to each record; missing plugins are skipped without failing the scan
 - **SVG Charting** — pure SVG dual-axis line charts, donut pie charts, and bar charts (no charting library)
 - **SPA Routing** — URL-parameter-based navigation with browser history support and Magellan integration
-
----
-
-## Project Structure
-
-```
-├── now.config.json                 # ServiceNow app configuration
-├── package.json                    # Dependencies and scripts
-├── assets/                         # Screenshots of the AIUX widgets (for this README)
-├── docs/                           # Design notes (conversational navigation, example agent)
-└── src/
-    ├── client/                     # React SPA (UI Page)
-    │   ├── app.tsx                 # Root component with SPA router
-    │   ├── index.html              # HTML entry point
-    │   ├── main.tsx                # React DOM mount
-    │   ├── tsconfig.json           # Client-side TypeScript config
-    │   ├── components/             # UI components
-    │   │   ├── AgentPerformance.tsx   # Performance view with task telemetry
-    │   │   ├── AppDetail.tsx          # App detail with composition scan & ROI
-    │   │   ├── Applications.tsx       # App list with KPIs and search
-    │   │   ├── BuildErrorDisplay.tsx  # Build error visualization
-    │   │   ├── ConversationDetail.tsx # Message thread with Markdown rendering
-    │   │   ├── DataTable.tsx          # Reusable sortable/expandable table
-    │   │   ├── KpiCard.tsx            # KPI card with refresh and tooltip
-    │   │   ├── KpiInfoModal.tsx       # Modal explaining KPI definitions
-    │   │   ├── LoadingModal.tsx       # Blocking loading modal
-    │   │   ├── MarkdownRenderer.tsx   # Markdown + Mermaid renderer
-    │   │   ├── NauBreakdown.tsx       # NAU consumption breakdown display
-    │   │   ├── Navigation.tsx         # Top nav with tab routing
-    │   │   ├── Skeleton.tsx           # Skeleton loading placeholders
-    │   │   ├── TimeSeriesView.tsx     # SVG dual-axis time-series chart
-    │   │   ├── UserConsumption.tsx    # Monthly NAU consumption table
-    │   │   └── UserProfile.tsx        # User profile with pie/timeline charts
-    │   ├── services/
-    │   │   ├── api.ts              # ServiceNow Table & Aggregate API client
-    │   │   └── queryTracker.ts     # Query performance/telemetry tracking
-    │   ├── styles/                 # Modular CSS files
-    │   │   ├── base.css            # Root variables, resets, layout
-    │   │   ├── shared.css          # Shared component styles
-    │   │   ├── applications.css    # Applications view styles
-    │   │   ├── app-detail.css      # App detail view styles
-    │   │   ├── conversation.css    # Conversation detail styles
-    │   │   ├── performance.css     # Performance view styles
-    │   │   ├── timeseries.css      # TimeSeries chart styles
-    │   │   ├── consumption.css     # Consumption view styles
-    │   │   ├── user-profile.css    # User profile styles
-    │   │   ├── json-tree.css       # JSON/tool output styles
-    │   │   ├── loading.css         # Loading modal / skeleton styles
-    │   │   └── responsive.css      # Responsive breakpoints
-    │   └── utils/
-    │       ├── complexity.ts       # Complexity scoring, ROI, partner-hour estimates
-    │       ├── fields.ts           # Field extraction, message parsing, sender types
-    │       ├── tokenEstimation.ts  # Token usage estimation (input/output/thinking)
-    │       └── workingDuration.ts  # Implementation duration from message intervals
-    ├── fluent/                     # ServiceNow Fluent metadata
-    │   ├── agents/
-    │   │   └── analytics-navigator.now.ts   # AI Agent (Otto) — conversational analytics
-    │   ├── navigation/
-    │   │   └── menu.now.ts         # Application menu + dashboard module
-    │   ├── tables/
-    │   │   ├── settings.now.ts     # User settings table
-    │   │   └── timeseries_cache.now.ts  # TimeSeries cache table
-    │   ├── ui-pages/
-    │   │   └── analytics.now.ts    # UI Page definition
-    │   └── widgets/                # AIUX widgets (sys_aix_widget) rendered by Otto
-    │       ├── app-overview-card.now.ts     # App Overview Card widget
-    │       ├── nau-consumption-chart.now.ts # NAU Consumption Chart widget
-    │       └── activity-heatmap-card.now.ts # Activity Heatmap Card widget
-    └── server/
-        └── tsconfig.json           # Server-side TypeScript config
-```
 
 ---
 
@@ -115,10 +50,10 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18.2, TypeScript |
-| Rendering | [marked](https://github.com/markedjs/marked) (Markdown), [mermaid](https://mermaid.js.org/) (diagrams) |
+| Rendering | [marked](https://github.com/markedjs/marked) 12.0.2 (Markdown), [mermaid](https://mermaid.js.org/) 10.9.3 (diagrams) |
 | Charts | Pure SVG (no charting library) |
 | Platform | ServiceNow (Table API, Aggregate/Stats API, UI Page) |
-| SDK | `@servicenow/sdk` 4.7.2 (Fluent DSL) |
+| SDK | `@servicenow/sdk` 4.12.1 (Fluent DSL), `@servicenow/glide` 27.0.5 |
 
 ---
 
@@ -137,6 +72,8 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 | `sys_user` | User profile name resolution |
 
 ### Application Composition (scanned per app scope)
+
+Each table is queried with `sys_scope=<appId>`; tables belonging to uninstalled plugins are skipped silently.
 
 | Table | Metadata Type |
 |-------|---------------|
@@ -167,10 +104,19 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 
 ### Custom Tables (owned by this app)
 
+| Table | Purpose | Key Fields |
+|-------|---------|-----------|
+| `x_snc_build_agranx_settings` | Per-user application preferences (key/value JSON) | `key`, `value`, `user` |
+| `x_snc_build_agranx_timeseries_cache` | Cached daily token/message aggregates per user/app | `period_date`, `token_count`, `message_count`, `user`, `application_id` |
+
+### Platform Records Created
+
 | Table | Purpose |
 |-------|---------|
-| `x_snc_build_agranx_settings` | Per-user application preferences (key/value JSON) |
-| `x_snc_build_agranx_timeseries_cache` | Cached daily token/message aggregates per user/app |
+| `sys_ui_page` | The `analytics` UI Page hosting the SPA |
+| `sys_app_application` / `sys_app_module` | Application menu and dashboard module |
+| `sn_aia_agent` | The Build Agent Analytics Navigator AI Agent |
+| `sys_aix_widget` | The three AIUX widgets rendered in chat |
 
 ---
 
@@ -179,24 +125,34 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.7.2) with a React-based
 ### Applications
 
 Main entry point. Displays all applications that have Build Agent conversations, with:
-- Global KPI cards (conversations, messages, apps, checkpoints) via Aggregate API
+- Global KPI cards (conversations, messages, apps, NAU, users) via Aggregate API
 - Sortable table with per-app conversation/checkpoint counts
 - Search by application name or description
 
 ### App Detail
 
 Accessed by clicking an app row. Shows:
-- **Metadata Composition** — scans 24 metadata types, grouped into categories (Data Model, Server Logic, Client Logic, Security, Automation, UI, Integration, Configuration, Catalog, Testing), each item linking to its platform record
-- **Complexity Score** — weighted score with configurable weights per metadata type
+- **KPI Row** — user messages, assistant messages, implementation duration, and NowAssist Units (the NAU card's modal also details total/input/output/thinking token consumption)
+- **Usage by Author** — per-author aggregate of conversations, messages, tokens and NAU
+- **Metadata Composition** — scans 24 metadata types, grouped into 10 categories (Data Model, Server-Side Logic, Client-Side Logic, Security, Automation, User Interface, Integration, Configuration, Service Catalog, Testing), each item linking to its platform record
+- **Complexity Score** — weighted score with configurable, per-user-persisted weights per metadata type
 - **ROI Calculator** — partner-hour estimates vs. Build Agent implementation time, with savings percentage
-- **Implementation Duration** — computed from user message intervals across all conversations
-- **Conversations List** — related conversations sorted by recency
+- **Conversations Timeline** — related conversations sorted by recency
+
+### Conversation Detail
+
+Full transcript of a single conversation:
+- KPI cards: user messages, assistant messages, total messages, NowAssist Units
+- **Token Usage Summary** and **NAU Breakdown** panels
+- Message search, collapsible JSON tree for tool inputs, generic tool-result modal, image lightbox, file attachments
+- Tool calls annotated with category icons, duration and success/failure; `run_script` calls open the dedicated Run Script viewer
+- **Export / Print** button producing a printable HTML document (save as PDF from the browser)
 
 ### Consumption
 
 Monthly view of Build Agent usage per user:
-- Month navigation (forward/backward arrows)
-- Per-user breakdown: conversations, user messages, NAU (25 units per user message)
+- Month navigation, with the month list generated dynamically from the oldest message to the current month
+- Per-user breakdown: active conversations (those with at least one NAU-billable interaction in the month), user messages, and NAU
 - Search by user name
 - Click-through to User Profile
 
@@ -214,14 +170,13 @@ Per-application token consumption over time:
 - Application selector dropdown
 - KPI cards: total tokens, total messages, avg tokens/day, peak day
 - **Dual-axis SVG line chart**: tokens (left axis, solid line) + messages (right axis, dashed line)
-- Client-side caching in `timeseries_cache` table for fast reloads
+- Results cached in the `timeseries_cache` table (365-day read window) for fast reloads
 - Manual "Refresh Data" to recompute from raw messages
 
 ### Performance
 
 Agent task telemetry dashboard:
 - Task-level metrics: build-fix cycles, errors, rollbacks, lines of code changed
-- Event-level drill-down: steps within each task with individual timing
 - Status indicators: success, failure, in-progress
 
 ---
@@ -234,6 +189,8 @@ Beyond the SPA dashboard, this app exposes its analytics **conversationally**. I
 
 [**ServiceNow Otto**](https://www.servicenow.com/products/now-assist.html) (formerly *Now Assist*) is ServiceNow's generative-AI experience layer. It hosts AI Agents that understand natural-language requests, orchestrate tools, and stream responses into the Now Assist Panel. This app ships an AI Agent — **Build Agent Analytics Navigator** (`sn_aia_agent`) — that resolves application names to sys_ids, routes the user's intent to the right tool, and returns a visual widget as its answer.
 
+The agent exposes four tools: a **Lookup Application** CRUD tool against `sys_app` (name → sys_id, with disambiguation when multiple apps match), plus one script tool per widget below.
+
 ### What is an AIUX Widget?
 
 An **AIUX Widget** (`sys_aix_widget`) is a self-contained web component — built on [**Lit**](https://lit.dev/) and extending `AIUXWidgetElement` — that Otto can embed as a "visual response" inside a conversation. Each widget declares a small `input_schema` (its props), optionally loads its own data through a server-side data script, and renders itself with pure SVG and Horizon design tokens. In this app, an agent tool returns a flat payload matching the widget's `input_schema`, and Otto injects it into the widget, which then renders as a card in the chat.
@@ -244,7 +201,7 @@ The three widgets below are wired to the Analytics Navigator agent and defined i
 
 ![App Overview Card](assets/widget-app-overview-card.png)
 
-A compact overview of a single application. Shows the app name plus KPI tiles for conversation count, user messages, NowAssist Unit cost (25 NAU per user message), and total implementation duration (computed from turn-based working intervals).
+A compact overview of a single application. Shows the app name plus KPI tiles for conversation count, user messages, NowAssist Unit cost, and total implementation duration (computed from turn-based working intervals).
 
 - **Input:** `appId` — the `sys_id` of the application (`sys_app`)
 - **Answers:** *"Tell me about app X"*, *"How is app Y doing?"*
@@ -269,6 +226,8 @@ A GitHub contribution-style heatmap of daily message activity for a single appli
 - **Input:** `appId` — the `sys_id` of the application (`sys_app`)
 - **Answers:** *"When was app X most active?"*, *"Show me the activity heatmap for app Y"*
 - **Source:** `src/fluent/widgets/activity-heatmap-card.now.ts`
+
+> ℹ️ The three widgets compute NAU with the simplified **user-messages-only** formula (`user messages × 25`). The SPA uses the fuller five-category formula described below, so widget figures may read lower than the dashboard's.
 
 ---
 
@@ -312,27 +271,42 @@ https://<instance>.service-now.com/x_snc_build_agranx_analytics.do
 | Setting | Value |
 |---------|-------|
 | Application Scope | `x_snc_build_agranx` |
-| Scope ID | `748e8d343b2987149a1600b693e45a0c` |
 | UI Page Endpoint | `x_snc_build_agranx_analytics.do` |
 
 ### User Preferences
 
-User preferences (column visibility, sort order, complexity weights, partner-hour estimates) are automatically persisted per user in the `x_snc_build_agranx_settings` table as JSON key/value pairs.
+Complexity weights and partner-hour estimates are persisted per user in the `x_snc_build_agranx_settings` table as JSON key/value pairs, under the keys `complexity_weights` and `partner_estimates`. Saved values are merged with defaults, so newly added metadata types pick up their default weight automatically.
 
 ### NAU Calculation
 
-Now Assist Unit consumption is calculated as:
-- **1 user message = 25 NAU**
-- Only messages with `sender === "user"` are counted
-- Filtered by month for the Consumption view
+Now Assist Unit consumption counts **five billable interaction types**, each worth **25 NAU**:
+
+```
+totalNau = (userMessages + installs + planning + appCreations + interviews) × 25
+```
+
+| Interaction | Detected as |
+|-------------|-------------|
+| User messages | message `sender` = `user` |
+| Installs | tool call `install` or `build_install` |
+| Planning | tool call `planning` |
+| App creations | tool call `create_new_servicenow_app` |
+| Interviews | tool call `interview` |
+
+Counting is done server-side through the Aggregate API using `contentLIKE` substring matching, so the large `content` field is never downloaded for KPI queries. The Consumption view filters these interactions by month.
 
 ### Token Estimation
 
-Token counts are estimated heuristically from message content:
-- Prose (user/assistant text): `length / 4`
-- Code (tool output): `length / 3`
-- JSON (structured data): `length / 3.5`
-- Bucketed into: **input** (user), **output** (assistant + tool), **thinking** (reasoning)
+Token counts are estimated heuristically from message content, by sender:
+
+| Sender | Divisor | Bucket |
+|--------|---------|--------|
+| `user` | `length / 4` (prose) | **input** |
+| `assistant` | `length / 4` (prose) | **output** |
+| `assistant-thinking` | `length / 4` (prose) | **thinking** |
+| `assistant-tool` | `length / 3.5` if the payload looks like JSON, otherwise `length / 3` | **output** |
+
+Totals are the sum of the three buckets. All figures are approximations displayed with a `~` prefix — they are not read back from the model.
 
 ---
 
@@ -351,8 +325,11 @@ Fluent metadata files (`.now.ts`) live under `src/fluent/` and are compiled into
 ### Key Architecture Decisions
 
 - **No charting library** — all charts are pure SVG rendered in React for zero additional bundle size
-- **Aggregate API** — KPI counts use `/api/now/stats` for O(1) server-side counting instead of downloading all records
-- **Client-side caching** — TimeSeries data is computed once and cached in a custom table, reducing repeated heavy queries
+- **Aggregate API for counting** — KPI counts use `/api/now/stats` with `sysparm_count` / `sysparm_group_by` for server-side counting instead of downloading records
+- **No dot-walked grouping** — Stats API group-by ordering is not guaranteed for dot-walked references, so grouping is done on direct foreign keys and rolled up client-side
+- **Request timeouts** — every GET is aborted at 55 s, just under the platform transaction limit, surfacing a typed timeout error instead of a hung view
+- **Batched message fetches** — very active users' conversations are fetched in batches of 25 to avoid API truncation
+- **Server-side caching** — TimeSeries data is computed once and written back to a custom table, reducing repeated heavy queries
 - **SPA routing** — URL parameters (`?view=X&id=Y`) enable deep-linking, browser back/forward, and Magellan integration for workspace embedding
 - **Modular CSS** — styles split per view for maintainability; shared tokens defined in `base.css`
 

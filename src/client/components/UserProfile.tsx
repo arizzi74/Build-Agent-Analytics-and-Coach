@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fetchUserProfile } from "../services/api.ts";
 import type { UserProfileData } from "../services/api.ts";
 import { useQueryTracker } from "../services/queryTracker.ts";
@@ -25,27 +25,29 @@ function formatDate(dateStr: string): string {
 
 // ─── SVG Donut Pie Chart (Top 5 + "Altro") ──────────────────────────────────
 function PieChart({ data }: { data: UserProfileData["appBreakdown"] }) {
+  // Memoized ABOVE the empty-data early return so the hook order never changes.
+  // Same logic as before: sort by percentage descending to get the true top 5 by
+  // consumption, then collapse everything else into a single "Altro" slice.
+  const chartData = useMemo(() => {
+    const sorted = [...data].sort((a, b) => b.percentage - a.percentage);
+    const top5 = sorted.slice(0, 5);
+    const rest = sorted.slice(5);
+    const result = [...top5];
+    if (rest.length > 0) {
+      result.push({
+        appId: "__other__",
+        appName: "Altro",
+        messages: rest.reduce((sum, app) => sum + app.messages, 0),
+        conversations: rest.reduce((sum, app) => sum + app.conversations, 0),
+        percentage: rest.reduce((sum, app) => sum + app.percentage, 0),
+        lastActivity: "",
+      });
+    }
+    return result;
+  }, [data]);
+
   if (data.length === 0) {
     return <div className="ba-chart__empty">No application data available</div>;
-  }
-
-  // Sort by percentage descending to get the true top 5 by consumption
-  const sorted = [...data].sort((a, b) => b.percentage - a.percentage);
-  const top5 = sorted.slice(0, 5);
-  const rest = sorted.slice(5);
-  const otherPercentage = rest.reduce((sum, app) => sum + app.percentage, 0);
-  const otherMessages = rest.reduce((sum, app) => sum + app.messages, 0);
-
-  const chartData = [...top5];
-  if (rest.length > 0) {
-    chartData.push({
-      appId: "__other__",
-      appName: "Altro",
-      messages: otherMessages,
-      conversations: rest.reduce((sum, app) => sum + app.conversations, 0),
-      percentage: otherPercentage,
-      lastActivity: "",
-    });
   }
 
   const size = 200;
@@ -108,27 +110,40 @@ function PieChart({ data }: { data: UserProfileData["appBreakdown"] }) {
 }
 
 // ─── SVG Timeline Bar Chart ──────────────────────────────────────────────────
+// Static geometry, hoisted out of the component: it never depends on props.
+const TL_WIDTH = 900;
+const TL_HEIGHT = 180;
+const TL_PADDING = { top: 20, right: 20, bottom: 40, left: 45 };
+const TL_CHART_WIDTH = TL_WIDTH - TL_PADDING.left - TL_PADDING.right;
+const TL_CHART_HEIGHT = TL_HEIGHT - TL_PADDING.top - TL_PADDING.bottom;
+const TL_Y_TICKS = 4;
+
 function TimelineChart({ data }: { data: UserProfileData["timeline"] }) {
+  // Memoized ABOVE the empty-data early return (stable hook order). All values
+  // derive from `data` only, with the exact same formulas as before.
+  const { maxMessages, barWidth, barGap, yStep, labelInterval } = useMemo(() => {
+    const max = Math.max(...data.map((d) => d.messages), 1);
+    const bw = Math.max(2, Math.min(14, (TL_CHART_WIDTH / data.length) - 2));
+    return {
+      maxMessages: max,
+      barWidth: bw,
+      barGap: (TL_CHART_WIDTH - bw * data.length) / Math.max(data.length - 1, 1),
+      yStep: Math.ceil(max / TL_Y_TICKS),
+      // Show limited x-axis labels
+      labelInterval: Math.max(1, Math.floor(data.length / 10)),
+    };
+  }, [data]);
+
   if (data.length === 0) {
     return <div className="ba-chart__empty">No timeline data available</div>;
   }
 
-  const width = 900;
-  const height = 180;
-  const padding = { top: 20, right: 20, bottom: 40, left: 45 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-
-  const maxMessages = Math.max(...data.map((d) => d.messages), 1);
-  const barWidth = Math.max(2, Math.min(14, (chartWidth / data.length) - 2));
-  const barGap = (chartWidth - barWidth * data.length) / Math.max(data.length - 1, 1);
-
-  // Y-axis grid lines
-  const yTicks = 4;
-  const yStep = Math.ceil(maxMessages / yTicks);
-
-  // Show limited x-axis labels
-  const labelInterval = Math.max(1, Math.floor(data.length / 10));
+  const width = TL_WIDTH;
+  const height = TL_HEIGHT;
+  const padding = TL_PADDING;
+  const chartWidth = TL_CHART_WIDTH;
+  const chartHeight = TL_CHART_HEIGHT;
+  const yTicks = TL_Y_TICKS;
 
   return (
     <div className="ba-timeline-chart">
@@ -207,6 +222,15 @@ function TimelineChart({ data }: { data: UserProfileData["timeline"] }) {
 type SortColumn = "appName" | "lastActivity" | "messages" | "conversations" | "percentage";
 type SortDirection = "asc" | "desc";
 
+/** Static header definition for the per-application table (was an inline literal in the JSX). */
+const APP_TABLE_HEADERS: [SortColumn, string][] = [
+  ["appName", "Application"],
+  ["lastActivity", "Last Activity"],
+  ["messages", "Messages"],
+  ["conversations", "Conversations"],
+  ["percentage", "% of Total"],
+];
+
 // ─── Main UserProfile Component ──────────────────────────────────────────────
 export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
@@ -235,6 +259,28 @@ export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
     load();
     return () => { cancelled = true; };
   }, [userId]);
+
+  // Per-application table ordering, extracted from the table JSX and memoized.
+  // Declared before the early returns below so the hook order stays stable
+  // across the skeleton / error / loaded renders. The comparator is unchanged.
+  const sortedAppBreakdown = useMemo(() => {
+    const rows = profile?.appBreakdown;
+    if (!rows) return [];
+    return [...rows].sort((a, b) => {
+      const dir = sortDirection === "desc" ? -1 : 1;
+      if (sortColumn === "appName") {
+        return dir * a.appName.localeCompare(b.appName);
+      } else if (sortColumn === "lastActivity") {
+        return dir * a.lastActivity.localeCompare(b.lastActivity);
+      } else if (sortColumn === "messages") {
+        return dir * (a.messages - b.messages);
+      } else if (sortColumn === "conversations") {
+        return dir * (a.conversations - b.conversations);
+      } else {
+        return dir * (a.percentage - b.percentage);
+      }
+    });
+  }, [profile, sortColumn, sortDirection]);
 
   if (loading) {
     return <SkeletonUserProfileView />;
@@ -337,13 +383,7 @@ export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
             <table className="ba-table">
               <thead style={{ position: "sticky", top: 0, zIndex: 1, background: "#fff" }}>
                 <tr>
-                  {([
-                    ["appName", "Application"],
-                    ["lastActivity", "Last Activity"],
-                    ["messages", "Messages"],
-                    ["conversations", "Conversations"],
-                    ["percentage", "% of Total"],
-                  ] as [SortColumn, string][]).map(([col, label]) => (
+                  {APP_TABLE_HEADERS.map(([col, label]) => (
                     <th
                       key={col}
                       onClick={() => {
@@ -363,22 +403,7 @@ export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
                 </tr>
               </thead>
               <tbody>
-                {[...profile.appBreakdown]
-                  .sort((a, b) => {
-                    const dir = sortDirection === "desc" ? -1 : 1;
-                    if (sortColumn === "appName") {
-                      return dir * a.appName.localeCompare(b.appName);
-                    } else if (sortColumn === "lastActivity") {
-                      return dir * a.lastActivity.localeCompare(b.lastActivity);
-                    } else if (sortColumn === "messages") {
-                      return dir * (a.messages - b.messages);
-                    } else if (sortColumn === "conversations") {
-                      return dir * (a.conversations - b.conversations);
-                    } else {
-                      return dir * (a.percentage - b.percentage);
-                    }
-                  })
-                  .map((app) => (
+                {sortedAppBreakdown.map((app) => (
                   <tr key={app.appId}>
                     <td>
                       <span className="ba-user-profile__app-name">{app.appName}</span>

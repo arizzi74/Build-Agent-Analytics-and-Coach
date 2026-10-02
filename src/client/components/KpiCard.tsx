@@ -10,7 +10,7 @@ interface KpiCardProps {
   onClick?: () => void;
 }
 
-export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefresh, loading, onClick }: KpiCardProps) {
+function KpiCard({ title, value: kpiValue, icon, tooltip, onRefresh, loading, onClick }: KpiCardProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -19,9 +19,6 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefre
     : icon === "cost" ? "💎"
     : icon === "duration" ? "⏱️"
     : icon === "tokens" ? "🔢"
-    : icon === "wallclock" ? "🕐"
-    : icon === "avginteraction" ? "⚡"
-    : icon === "avgpause" ? "☕"
     : null;
 
   const modifier = icon === "user"
@@ -34,12 +31,6 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefre
     ? " ba-kpi-card--duration"
     : icon === "tokens"
     ? " ba-kpi-card--tokens"
-    : icon === "wallclock"
-    ? " ba-kpi-card--wallclock"
-    : icon === "avginteraction"
-    ? " ba-kpi-card--avginteraction"
-    : icon === "avgpause"
-    ? " ba-kpi-card--avgpause"
     : "";
 
   const isLoading = loading || refreshing;
@@ -87,3 +78,11 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefre
     </div>
   );
 }
+
+/**
+ * Memoized: KPI cards are pure presentational leaves rendered in rows of 4-6,
+ * re-rendered on every parent state change (search typing, modals, sorting).
+ * Effective as long as callers pass stable `onRefresh` / `onClick` callbacks.
+ * Consumers keep importing the default export under the same name.
+ */
+export default React.memo(KpiCard);

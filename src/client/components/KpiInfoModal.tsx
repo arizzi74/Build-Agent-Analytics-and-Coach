@@ -86,14 +86,6 @@ export const KPI_DESCRIPTIONS: Record<string, KpiInfo> = {
     methodology:
       "Vengono contati tutti i messaggi nella tabella sn_build_agent_message il cui campo 'sender' corrisponde a 'assistant' o 'bot'. Un singolo turno di risposta dell'agente — anche se contiene più tool call — viene contato come un unico messaggio.",
   },
-  tokens: {
-    icon: "🔢",
-    title: "Tokens",
-    description:
-      "Stima del numero totale di token consumati (input + output + thinking) in tutte le conversazioni di questa applicazione. Rappresenta il volume di elaborazione linguistica dell'LLM.",
-    methodology:
-      "La stima si basa sulla lunghezza in caratteri di ogni messaggio, applicando un fattore di conversione (~4 caratteri per token per l'inglese, ~3 per testo misto). I token di input comprendono il messaggio utente e il contesto; l'output include la risposta dell'agente; il thinking include i ragionamenti interni. È una stima approssimata, non una lettura diretta dal modello.",
-  },
   duration: {
     icon: "⏱️",
     title: "Implementation Duration",

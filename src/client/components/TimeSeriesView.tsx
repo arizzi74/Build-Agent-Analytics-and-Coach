@@ -189,12 +189,7 @@ function TimeSeriesChart({ data }: ChartProps) {
             cy={yTokens(d.tokenCount)}
             r="4"
             fill={COLOR_TOKENS}
-            onMouseEnter={(e) => {
-              const svg = (e.target as SVGElement).closest("svg");
-              if (!svg) return;
-              const pt = svg.createSVGPoint();
-              pt.x = e.clientX;
-              pt.y = e.clientY;
+            onMouseEnter={() => {
               setTooltip({ x: xScale(i), y: yTokens(d.tokenCount) - 12, point: d });
             }}
             onMouseLeave={() => setTooltip(null)}

@@ -1,6 +1,99 @@
 declare const window: any;
 
+import { registerTruncationWarning } from "./truncation.ts";
+
 const BASE = "/api/now/table";
+
+/**
+ * ─── Query limits ──────────────────────────────────────────────────────────────
+ *
+ * Every Table API list query MUST go through `requestList`/`requestFirst`, which
+ * force an explicit `sysparm_limit` taken from this object. Rationale:
+ *  • an implicit limit is invisible in the network trace and silently caps data
+ *    (the Table API default is 10000);
+ *  • a single place to tune makes the trade-off between completeness and payload
+ *    reviewable instead of scattered magic numbers.
+ *
+ * 10000 is used wherever a limit was previously absent: it equals the platform
+ * default, so today's behaviour (and today's numbers) are unchanged.
+ */
+export const QUERY_LIMITS = {
+  /** "Does this record exist / give me the newest one" lookups. Intentionally 1. */
+  singleRecord: 1,
+
+  /** Conversation list for the Applications view. Was unlimited → platform default. */
+  conversations: 10000,
+  /** Conversation→user map for the Consumption view. Unchanged (was 10000). */
+  conversationsForConsumption: 10000,
+  /** Conversations of one user in the User Profile view. Unchanged (was 1000). */
+  conversationsForUserProfile: 1000,
+  /** Distinct-app scan for the TimeSeries app picker. Unchanged (was 500). */
+  conversationsForAppPicker: 500,
+
+  /** Messages of ONE conversation (detail views). Was unlimited → platform default. */
+  messagesPerConversation: 10000,
+  /** Checkpoints of ONE conversation. Was unlimited → platform default. */
+  checkpointsPerConversation: 10000,
+  /** Messages fetched per 25-conversation batch in the User Profile. Unchanged. */
+  messagesPerBatch: 10000,
+  /** Messages of one app for the TimeSeries recompute. Unchanged (was 10000). */
+  messagesForTimeSeries: 10000,
+
+  /** Task telemetry rows in the Performance view. Was unlimited → platform default. */
+  taskTelemetry: 10000,
+  /** Tool event telemetry rows. Unchanged (was 5000) — aggregated client-side. */
+  eventTelemetry: 5000,
+
+  /** Metadata records per table during an app composition scan. Unchanged (was 500). */
+  scopeComponents: 500,
+
+  /**
+   * Rows of the time series cache. The query is bounded to the last
+   * `timeSeriesWindowDays` days and the table holds at most one row per
+   * user+app+day, so 400 can never clip a valid window (was 365, which DID clip).
+   */
+  timeSeriesCache: 400,
+  /** Length of the time series window, in days. */
+  timeSeriesWindowDays: 365,
+
+  /** sys_id-IN lookups used to resolve names (sys_app, sys_user). */
+  referenceLookup: 10000,
+} as const;
+
+/**
+ * Table API list request with a mandatory explicit limit and centralized
+ * truncation detection: when the number of returned records reaches the
+ * requested limit the result is potentially incomplete, which we report once
+ * per context via the truncation store (console.warn + UI banner).
+ *
+ * Doing it here — instead of in `request()` — means the detection has access to
+ * the context label and the limit, which a generic URL-level hook would not.
+ */
+async function requestList(
+  table: string,
+  params: URLSearchParams,
+  label: string,
+  limit: number
+): Promise<any[]> {
+  params.set("sysparm_limit", String(limit));
+  const { result } = await request(`${BASE}/${table}?${params}`);
+  const rows: any[] = result || [];
+  if (rows.length >= limit) {
+    registerTruncationWarning({ label, table, limit, returned: rows.length });
+  }
+  return rows;
+}
+
+/**
+ * "Top 1" lookup (existence check / oldest-newest record). Uses
+ * `QUERY_LIMITS.singleRecord` and deliberately skips truncation detection:
+ * here `returned === limit` is the expected success case, not a warning.
+ */
+async function requestFirst(table: string, params: URLSearchParams): Promise<any | null> {
+  params.set("sysparm_limit", String(QUERY_LIMITS.singleRecord));
+  const { result } = await request(`${BASE}/${table}?${params}`);
+  return result && result.length > 0 ? result[0] : null;
+}
 
 /** Default per-request timeout (ms). Kept below the platform's ~60s transaction
  *  limit so a slow/hung request fails fast and visibly instead of hanging. */
@@ -77,14 +170,13 @@ export async function fetchSettings(key: string): Promise<any> {
   const params = new URLSearchParams({
     sysparm_query: `key=${key}^user=${userId}`,
     sysparm_fields: "sys_id,key,value,user",
-    sysparm_limit: "1",
   });
-  const { result } = await request(`${BASE}/${SETTINGS_TABLE}?${params}`);
-  if (result && result.length > 0) {
+  const record = await requestFirst(SETTINGS_TABLE, params);
+  if (record) {
     try {
-      return JSON.parse(result[0].value);
+      return JSON.parse(record.value);
     } catch {
-      return result[0].value;
+      return record.value;
     }
   }
   return null;
@@ -99,12 +191,11 @@ export async function saveSettings(key: string, value: any): Promise<void> {
   const params = new URLSearchParams({
     sysparm_query: `key=${key}^user=${userId}`,
     sysparm_fields: "sys_id",
-    sysparm_limit: "1",
   });
-  const { result } = await request(`${BASE}/${SETTINGS_TABLE}?${params}`);
+  const existing = await requestFirst(SETTINGS_TABLE, params);
 
-  if (result && result.length > 0) {
-    const sysId = typeof result[0].sys_id === "string" ? result[0].sys_id : result[0].sys_id?.value;
+  if (existing) {
+    const sysId = typeof existing.sys_id === "string" ? existing.sys_id : existing.sys_id?.value;
     await patchRecord(SETTINGS_TABLE, sysId, { value: jsonValue });
   } else {
     await postRecord(SETTINGS_TABLE, { key, value: jsonValue, user: userId });
@@ -148,10 +239,19 @@ export async function fetchDistinctCount(table: string, field: string, query = "
 
 /**
  * Aggregate COUNT grouped by a (possibly dot-walked) field, using the Stats API.
- * Returns a Map of groupValue -> count. The Stats API's encoded-query parser
- * turns `field LIKE value` into a SQL `LIKE '%value%'` substring match, which is
- * how we count messages by inspecting the JSON `content` field WITHOUT ever
- * downloading it to the client (the source of the previous 60s timeouts).
+ * Returns a Map of groupValue -> count (counts are parsed from the strings the
+ * Stats API returns, and the nested `groupby_fields` structure is unwrapped here
+ * so callers never have to).
+ *
+ * Two uses today, both grouping on the DIRECT `conversation` foreign key:
+ *  • `fetchUserConsumption` — with a `LIKE` filter on the JSON `content` field,
+ *    so messages are classified WITHOUT ever downloading `content` to the client
+ *    (the source of the previous 60s timeouts);
+ *  • `Applications.tsx` — plain per-conversation message/checkpoint counts,
+ *    replacing the full-table downloads that only existed to count rows.
+ *
+ * Note: conversations with zero matching records simply have no group, so
+ * callers must treat a missing key as 0.
  */
 export async function fetchAggregateCountByGroup(
   table: string,
@@ -177,28 +277,6 @@ export async function fetchAggregateCountByGroup(
   return map;
 }
 
-export interface KpiCounts {
-  conversations: number;
-  messages: number;
-  apps: number;
-  nauUnits: number;
-  users: number;
-}
-
-/**
- * Fetch all KPI counts in parallel using the Aggregate API for real platform data.
- */
-export async function fetchKpiCounts(): Promise<KpiCounts> {
-  const [conversations, messages, apps, nauUnits, users] = await Promise.all([
-    fetchTableCount("sn_build_agent_conversation"),
-    fetchTableCount("sn_build_agent_message"),
-    fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY"),
-    fetchTotalNauConsumed(),
-    fetchDistinctCount("sn_build_agent_conversation", "user", "userISNOTEMPTY"),
-  ]);
-  return { conversations, messages, apps, nauUnits, users };
-}
-
 /**
  * Calculate total Now Assist Units consumed (all-time) using the Stats API.
  * Each interaction (user message, install, build_install, planning, app creation, interview) = 25 NAU.
@@ -217,20 +295,39 @@ export async function fetchTotalNauConsumed(): Promise<number> {
 
 // ─── Conversations API ─────────────────────────────────────────────────────────
 
+/**
+ * Conversation list.
+ *
+ * `sysparm_display_value=all` is KEPT on purpose: consumers read display values
+ * of this payload — Applications.tsx uses `display(c.application_name)` and
+ * `display(c.last_message_at)`, AppDetail.tsx uses `display(raw.user)` (a
+ * reference: without the display value the Author column would show a sys_id),
+ * `display(raw.state)` (choice label) and `display(raw.last_message_at)`
+ * (user-formatted/localized date). No `content`-like field is selected here, so
+ * "all" only duplicates short scalars — the payload cost is negligible.
+ */
 export async function fetchConversations(query = "") {
   const params = new URLSearchParams({
     sysparm_display_value: "all",
     sysparm_fields:
-      "sys_id,title,application_id,application_name,user,state,last_message_at,sys_created_on,client,ba_variant_type",
+      "sys_id,title,application_id,application_name,user,state,last_message_at,sys_created_on,client",
   });
   if (query) params.set("sysparm_query", query);
   else params.set("sysparm_query", "ORDERBYDESClast_message_at");
-  const { result } = await request(
-    `${BASE}/sn_build_agent_conversation?${params}`
+  return requestList(
+    "sn_build_agent_conversation",
+    params,
+    "Conversazioni",
+    QUERY_LIMITS.conversations
   );
-  return result || [];
 }
 
+/**
+ * Single conversation record (detail view header).
+ * `display_value=all` is REQUIRED: ConversationDetail.tsx and
+ * utils/conversationExport.ts render `display()` of title, user, state, client,
+ * application_name and sys_created_on. A single record → no payload concern.
+ */
 export async function fetchConversation(id: string) {
   const params = new URLSearchParams({ sysparm_display_value: "all" });
   const { result } = await request(
@@ -239,55 +336,55 @@ export async function fetchConversation(id: string) {
   return result;
 }
 
+/**
+ * Messages of one conversation.
+ *
+ * `sysparm_display_value` REMOVED: `content` holds the tool JSON (tens of KB per
+ * message) and "all" made the platform send it twice. No consumer reads a
+ * display value of these fields — every reader goes through the raw value:
+ * fields.ts `parseMessageContent`/`value()`, tokenEstimation.analyzeMessage,
+ * computeNauBreakdown and workingDuration.fieldValue all read `.value` or the
+ * plain string. `sys_created_on` is only used for arithmetic (turn durations,
+ * day bucketing), never rendered, and its raw value is the same internal
+ * datetime that `.value` returned before.
+ */
 export async function fetchMessages(conversationId: string) {
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
     sysparm_query: `conversation=${conversationId}^ORDERBYsequence`,
-    sysparm_fields: "sys_id,sequence,content,checkpoint,sub_agent_id,sys_created_on",
+    sysparm_fields: "sys_id,content,sys_created_on",
   });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_message?${params}`
+  return requestList(
+    "sn_build_agent_message",
+    params,
+    "Messaggi (conversazione)",
+    QUERY_LIMITS.messagesPerConversation
   );
-  return result || [];
 }
 
+/**
+ * Checkpoints of one conversation. `display_value` REMOVED: the only consumer
+ * (AppDetail.tsx) uses `chks.length` — no field value is ever read.
+ */
 export async function fetchCheckpoints(conversationId: string) {
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
     sysparm_query: `conversation=${conversationId}^ORDERBYsequence`,
-    sysparm_fields: "sys_id,name,change_summary,status,sequence",
+    sysparm_fields: "sys_id",
   });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_checkpoint?${params}`
+  return requestList(
+    "sn_build_agent_checkpoint",
+    params,
+    "Checkpoint (conversazione)",
+    QUERY_LIMITS.checkpointsPerConversation
   );
-  return result || [];
-}
-
-export async function fetchAllMessages() {
-  const params = new URLSearchParams({
-    sysparm_display_value: "all",
-    sysparm_fields: "sys_id,conversation",
-  });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_message?${params}`
-  );
-  return result || [];
-}
-
-export async function fetchAllCheckpoints() {
-  const params = new URLSearchParams({
-    sysparm_display_value: "all",
-    sysparm_fields: "sys_id,conversation",
-  });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_checkpoint?${params}`
-  );
-  return result || [];
 }
 
 /**
  * Fetch application names from sys_app table by their sys_ids.
  * Used to resolve "Unknown" application names.
+ *
+ * `display_value` REMOVED: `sys_app.name` is a plain string column, so its
+ * display value equals its value, and the parsing below already accepts the raw
+ * string form.
  */
 export async function fetchAppNames(appIds: string[]): Promise<Map<string, string>> {
   const nameMap = new Map<string, string>();
@@ -295,40 +392,36 @@ export async function fetchAppNames(appIds: string[]): Promise<Map<string, strin
 
   const query = `sys_idIN${appIds.join(",")}`;
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
     sysparm_query: query,
     sysparm_fields: "sys_id,name",
   });
-  const { result } = await request(`${BASE}/sys_app?${params}`);
-  if (result) {
-    result.forEach((app: any) => {
-      const id = typeof app.sys_id === "string" ? app.sys_id : app.sys_id?.value || "";
-      const name = typeof app.name === "string" ? app.name : app.name?.display_value || app.name?.value || "";
-      if (id && name) nameMap.set(id, name);
-    });
-  }
+  const result = await requestList("sys_app", params, "Nomi applicazioni", QUERY_LIMITS.referenceLookup);
+  result.forEach((app: any) => {
+    const id = typeof app.sys_id === "string" ? app.sys_id : app.sys_id?.value || "";
+    const name = typeof app.name === "string" ? app.name : app.name?.display_value || app.name?.value || "";
+    if (id && name) nameMap.set(id, name);
+  });
   return nameMap;
 }
 
 /**
  * Resolve user display names (sys_user.name) from a list of sys_ids in one query.
+ * `display_value` REMOVED: `sys_user.name` is a plain string column (its display
+ * value is identical) and the parsing below accepts the raw form.
  */
 export async function fetchUserNames(userIds: string[]): Promise<Map<string, string>> {
   const nameMap = new Map<string, string>();
   if (userIds.length === 0) return nameMap;
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
     sysparm_query: `sys_idIN${userIds.join(",")}`,
     sysparm_fields: "sys_id,name",
   });
-  const { result } = await request(`${BASE}/sys_user?${params}`);
-  if (result) {
-    result.forEach((u: any) => {
-      const id = typeof u.sys_id === "string" ? u.sys_id : u.sys_id?.value || "";
-      const name = typeof u.name === "string" ? u.name : u.name?.display_value || u.name?.value || "";
-      if (id && name) nameMap.set(id, name);
-    });
-  }
+  const result = await requestList("sys_user", params, "Nomi utenti", QUERY_LIMITS.referenceLookup);
+  result.forEach((u: any) => {
+    const id = typeof u.sys_id === "string" ? u.sys_id : u.sys_id?.value || "";
+    const name = typeof u.name === "string" ? u.name : u.name?.display_value || u.name?.value || "";
+    if (id && name) nameMap.set(id, name);
+  });
   return nameMap;
 }
 
@@ -340,6 +433,9 @@ export interface AppInfo {
 /**
  * Fetch application names and descriptions from sys_app table by their sys_ids.
  * Used for search-by-description in the Applications view.
+ *
+ * `display_value` REMOVED: `name`/`short_description` are plain string columns
+ * (display value === value) and the parsing below accepts the raw form.
  */
 export async function fetchAppDetails(appIds: string[]): Promise<Map<string, AppInfo>> {
   const detailMap = new Map<string, AppInfo>();
@@ -347,21 +443,18 @@ export async function fetchAppDetails(appIds: string[]): Promise<Map<string, App
 
   const query = `sys_idIN${appIds.join(",")}`;
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
     sysparm_query: query,
     sysparm_fields: "sys_id,name,short_description",
   });
-  const { result } = await request(`${BASE}/sys_app?${params}`);
-  if (result) {
-    result.forEach((app: any) => {
-      const id = typeof app.sys_id === "string" ? app.sys_id : app.sys_id?.value || "";
-      const name = typeof app.name === "string" ? app.name : app.name?.display_value || app.name?.value || "";
-      const description = typeof app.short_description === "string"
-        ? app.short_description
-        : app.short_description?.display_value || app.short_description?.value || "";
-      if (id) detailMap.set(id, { name, description });
-    });
-  }
+  const result = await requestList("sys_app", params, "Dettagli applicazioni", QUERY_LIMITS.referenceLookup);
+  result.forEach((app: any) => {
+    const id = typeof app.sys_id === "string" ? app.sys_id : app.sys_id?.value || "";
+    const name = typeof app.name === "string" ? app.name : app.name?.display_value || app.name?.value || "";
+    const description = typeof app.short_description === "string"
+      ? app.short_description
+      : app.short_description?.display_value || app.short_description?.value || "";
+    if (id) detailMap.set(id, { name, description });
+  });
   return detailMap;
 }
 
@@ -369,6 +462,11 @@ export async function fetchAppDetails(appIds: string[]): Promise<Map<string, App
  * Fetch records from a table filtered by application scope, returning details.
  * Returns an empty array gracefully if the table does not exist on the instance
  * (e.g. a plugin is not installed), preventing 400 errors from breaking the scan.
+ *
+ * `display_value=all` is KEPT: `fetchAppComposition` renders these records with
+ * `disp()` (label/title/short_description), and several of those columns are
+ * translated text whose display value differs from the stored value. None of the
+ * scanned fields is a large payload.
  */
 async function fetchByScope(table: string, appId: string, fields: string): Promise<any[]> {
   try {
@@ -376,10 +474,8 @@ async function fetchByScope(table: string, appId: string, fields: string): Promi
       sysparm_display_value: "all",
       sysparm_query: `sys_scope=${appId}`,
       sysparm_fields: fields,
-      sysparm_limit: "500",
     });
-    const { result } = await request(`${BASE}/${table}?${params}`);
-    return result || [];
+    return await requestList(table, params, `Componenti app (${table})`, QUERY_LIMITS.scopeComponents);
   } catch {
     // Table may not exist on this instance (plugin not installed, etc.)
     return [];
@@ -613,10 +709,14 @@ export async function fetchTimeSeriesApps(): Promise<TimeSeriesApp[]> {
   const params = new URLSearchParams({
     sysparm_query: "application_idISNOTEMPTY^ORDERBYapplication_name",
     sysparm_fields: "application_id,application_name",
-    sysparm_limit: "500",
   });
-  const { result } = await request(`${BASE}/sn_build_agent_conversation?${params}`);
-  if (!result) return [];
+  const result = await requestList(
+    "sn_build_agent_conversation",
+    params,
+    "Conversazioni (selettore app)",
+    QUERY_LIMITS.conversationsForAppPicker
+  );
+  if (result.length === 0) return [];
   const seen = new Set<string>();
   const apps: TimeSeriesApp[] = [];
   for (const r of result) {
@@ -645,16 +745,50 @@ export async function fetchTimeSeriesApps(): Promise<TimeSeriesApp[]> {
   return apps;
 }
 
+/**
+ * Return the date `daysBack` days before today, formatted `yyyy-MM-dd`
+ * (the format the platform expects for Date columns in an encoded query).
+ */
+function dateDaysAgo(daysBack: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysBack);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Read the cached daily time series for one user+app.
+ *
+ * BUGFIX (365-day window): the query used `ORDERBYperiod_date` (ASCENDING) with
+ * `sysparm_limit: 365`. Once more than a year of history existed, the platform
+ * returned the 365 OLDEST rows and silently dropped the most recent ones — the
+ * chart quietly stopped moving.
+ *
+ * Fix: an explicit lower bound on `period_date` (today − 365 days) so the window
+ * itself is bounded, and the ordering stays ASCENDING. This preserves the
+ * function's contract (points must come back in chronological order for the SVG
+ * chart, which draws its path in array order) without needing a client-side
+ * re-sort. The limit stays as a safety net only — the window can hold at most
+ * one row per day, well below `QUERY_LIMITS.timeSeriesCache`.
+ */
 export async function fetchTimeSeriesCache(appId: string): Promise<TimeSeriesPoint[]> {
   const userId = getCurrentUserId();
   if (!userId) return [];
+  const windowStart = dateDaysAgo(QUERY_LIMITS.timeSeriesWindowDays);
   const params = new URLSearchParams({
-    sysparm_query: `user=${userId}^application_id=${appId}^ORDERBYperiod_date`,
+    sysparm_query:
+      `user=${userId}^application_id=${appId}` +
+      `^period_date>=${windowStart}^ORDERBYperiod_date`,
     sysparm_fields: "sys_id,period_date,token_count,message_count",
-    sysparm_limit: "365",
   });
-  const { result } = await request(`${BASE}/${TIMESERIES_TABLE}?${params}`);
-  return (result || []).map((r: any) => ({
+  const result = await requestList(
+    TIMESERIES_TABLE,
+    params,
+    "Cache time series",
+    QUERY_LIMITS.timeSeriesCache
+  );
+  return result.map((r: any) => ({
     date: typeof r.period_date === "string" ? r.period_date : r.period_date?.value || "",
     tokenCount: parseInt(typeof r.token_count === "string" ? r.token_count : r.token_count?.value || "0") || 0,
     messageCount: parseInt(typeof r.message_count === "string" ? r.message_count : r.message_count?.value || "0") || 0,
@@ -668,9 +802,8 @@ export async function saveTimeSeriesPoint(point: TimeSeriesPoint, appId: string)
   const params = new URLSearchParams({
     sysparm_query: `user=${userId}^period_date=${point.date}^application_id=${appId}`,
     sysparm_fields: "sys_id",
-    sysparm_limit: "1",
   });
-  const { result } = await request(`${BASE}/${TIMESERIES_TABLE}?${params}`);
+  const existing = await requestFirst(TIMESERIES_TABLE, params);
   const data = {
     period_date: point.date,
     token_count: String(point.tokenCount),
@@ -678,23 +811,33 @@ export async function saveTimeSeriesPoint(point: TimeSeriesPoint, appId: string)
     user: userId,
     application_id: appId,
   };
-  if (result && result.length > 0) {
-    const sysId = typeof result[0].sys_id === "string" ? result[0].sys_id : result[0].sys_id?.value;
+  if (existing) {
+    const sysId = typeof existing.sys_id === "string" ? existing.sys_id : existing.sys_id?.value;
     await patchRecord(TIMESERIES_TABLE, sysId, data);
   } else {
     await postRecord(TIMESERIES_TABLE, data);
   }
 }
 
+/**
+ * Messages of one app, used to recompute the time series.
+ * Already free of `sysparm_display_value` — this is the model the other
+ * message queries were aligned to: only raw values are consumed
+ * (TimeSeriesView reads `value(msg.sys_created_on)` and `analyzeMessage`).
+ */
 export async function fetchMessagesForTimeSeries(appId: string): Promise<any[]> {
   // First fetch conversation sys_ids for the given app
   const convoParams = new URLSearchParams({
     sysparm_query: `application_id=${appId}`,
     sysparm_fields: "sys_id",
-    sysparm_limit: "500",
   });
-  const { result: convos } = await request(`${BASE}/sn_build_agent_conversation?${convoParams}`);
-  if (!convos || convos.length === 0) return [];
+  const convos = await requestList(
+    "sn_build_agent_conversation",
+    convoParams,
+    "Conversazioni (time series)",
+    QUERY_LIMITS.conversationsForAppPicker
+  );
+  if (convos.length === 0) return [];
   const convoIds = convos.map((c: any) => (typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "")).filter(Boolean);
   if (convoIds.length === 0) return [];
 
@@ -702,10 +845,13 @@ export async function fetchMessagesForTimeSeries(appId: string): Promise<any[]> 
   const msgParams = new URLSearchParams({
     sysparm_query: `conversationIN${convoIds.join(",")}^ORDERBYsys_created_on`,
     sysparm_fields: "sys_id,content,sys_created_on",
-    sysparm_limit: "10000",
   });
-  const { result: messages } = await request(`${BASE}/sn_build_agent_message?${msgParams}`);
-  return messages || [];
+  return requestList(
+    "sn_build_agent_message",
+    msgParams,
+    "Messaggi (time series)",
+    QUERY_LIMITS.messagesForTimeSeries
+  );
 }
 
 // ─── User Consumption API ──────────────────────────────────────────────────────
@@ -715,7 +861,6 @@ import type { NauBreakdown } from "../utils/fields.ts";
 /**
  * Determines if a message content JSON represents a user message.
  * The content field is JSON with a "sender" property; user messages have sender === "user".
- * Still used by fetchUserProfile (single-user detail view), which parses content directly.
  */
 function isUserMessageContent(contentField: any): boolean {
   const raw = typeof contentField === "string" ? contentField : contentField?.value || "";
@@ -767,45 +912,6 @@ function mergeCounts(a: Map<string, number>, b: Map<string, number>): Map<string
 }
 
 /**
- * Count DISTINCT conversations per user, and resolve each user's display name, in a
- * SINGLE aggregate on the CONVERSATION table grouped by `user`.
- *
- * This deliberately avoids a two-level `group_by=conversation.user,conversation` on the
- * message table: the Stats API does not guarantee that `groupby_fields[0]` is the field
- * you listed first (the dot-walked reference lands last), so reading index [0] as "user"
- * actually returned conversation sys_ids — inventing phantom "users".
- *
- * Grouping the conversation table by `user` (a single reference field) is unambiguous, and
- * `sysparm_display_value=true` gives us the user's name straight from the same call, so the
- * name is guaranteed to key-match the count (no fragile separate sys_user lookup).
- *
- * Returns Map<userSysId, { count, name }>.
- */
-async function fetchConversationsPerUser(
-  monthQuery: string
-): Promise<Map<string, { count: number; name: string }>> {
-  const params = new URLSearchParams({
-    sysparm_count: "true",
-    sysparm_group_by: "user",
-    sysparm_display_value: "true",
-  });
-  if (monthQuery) params.set("sysparm_query", monthQuery);
-  const { result } = await request(`${STATS_BASE}/sn_build_agent_conversation?${params}`);
-  const map = new Map<string, { count: number; name: string }>();
-  if (Array.isArray(result)) {
-    for (const grp of result) {
-      const gbFields = grp.groupby_fields || [];
-      const f = gbFields[0] || {};
-      const userId = f.value || "";
-      const name = f.display_value || "";
-      const count = parseInt(grp.stats?.count ?? "0", 10) || 0;
-      if (userId) map.set(userId, { count, name });
-    }
-  }
-  return map;
-}
-
-/**
  * Fetch user consumption data for a given month (YYYY-MM format).
  *
  * **Strategy (dot-walk–free):**
@@ -832,17 +938,24 @@ export async function fetchUserConsumption(monthFilter?: string): Promise<UserCo
   // ── Step 1: Build conversation→user mapping ────────────────────────────────
   // Fetches every conversation with display_value=all so we get both the user
   // sys_id (.value) and user name (.display_value) in a single call.
+  // display_value is REQUIRED here: `userNameMap` is built from
+  // `c.user.display_value` and feeds the User Name column of the Consumption
+  // table. No `content` field is selected, so nothing large is duplicated.
   const convoParams = new URLSearchParams({
     sysparm_display_value: "all",
     sysparm_fields: "sys_id,user",
-    sysparm_limit: "10000",
   });
-  const { result: convos } = await request(`${BASE}/sn_build_agent_conversation?${convoParams}`);
+  const convos = await requestList(
+    "sn_build_agent_conversation",
+    convoParams,
+    "Conversazioni (consumo)",
+    QUERY_LIMITS.conversationsForConsumption
+  );
 
   const convoToUser = new Map<string, string>();   // conversationId → userId
   const userNameMap = new Map<string, string>();    // userId → display name
 
-  for (const c of convos || []) {
+  for (const c of convos) {
     const convoId = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
     const userId  = typeof c.user === "object" ? (c.user?.value || "") : (c.user || "");
     const userName = typeof c.user === "object" ? (c.user?.display_value || "") : "";
@@ -967,13 +1080,12 @@ export async function fetchFirstMessageDate(): Promise<string | null> {
   const params = new URLSearchParams({
     sysparm_fields: "sys_created_on",
     sysparm_query: "ORDERBYsys_created_on",
-    sysparm_limit: "1",
   });
-  const { result } = await request(`${BASE}/sn_build_agent_message?${params}`);
-  if (!result || result.length === 0) return null;
-  const dateStr = typeof result[0].sys_created_on === "string"
-    ? result[0].sys_created_on
-    : result[0].sys_created_on?.value || "";
+  const first = await requestFirst("sn_build_agent_message", params);
+  if (!first) return null;
+  const dateStr = typeof first.sys_created_on === "string"
+    ? first.sys_created_on
+    : first.sys_created_on?.value || "";
   if (!dateStr) return null;
   const match = dateStr.match(/^(\d{4}-\d{2})/);
   return match ? match[1] : null;
@@ -1035,16 +1147,21 @@ export interface UserProfileData {
  */
 export async function fetchUserProfile(userId: string): Promise<UserProfileData> {
   // 1. Fetch all conversations for this user
+  //    display_value=all is REQUIRED: the profile header name comes from
+  //    `firstConvo.user.display_value` (a reference field — the raw value is a
+  //    sys_id). No `content` field here, so nothing large is duplicated.
   const convoParams = new URLSearchParams({
     sysparm_display_value: "all",
     sysparm_fields: "sys_id,user,application_name,application_id,sys_created_on",
     sysparm_query: `user=${userId}^ORDERBYDESCsys_created_on`,
-    sysparm_limit: "1000",
   });
-  const { result: convos } = await request(
-    `${BASE}/sn_build_agent_conversation?${convoParams}`
+  const convos = await requestList(
+    "sn_build_agent_conversation",
+    convoParams,
+    "Conversazioni (profilo utente)",
+    QUERY_LIMITS.conversationsForUserProfile
   );
-  if (!convos || convos.length === 0) {
+  if (convos.length === 0) {
     // Resolve user name from sys_user
     let userName = userId;
     try {
@@ -1092,18 +1209,25 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileData>
 
   // 2. Fetch all messages in batches by conversation IDs to avoid the 10000 API limit
   //    (dot-walking with a single request truncates recent conversations for active users)
+  //    sysparm_display_value REMOVED: this batch selects `content` (tens of KB of
+  //    tool JSON per row) and every consumer below reads raw values only
+  //    (`isUserMessageContent`, `m.conversation?.value`, `m.sys_created_on?.value`,
+  //    `computeNauBreakdown`). "all" was sending the whole `content` twice.
   const CONVO_BATCH_SIZE = 25;
   const allMessages: any[] = [];
   for (let i = 0; i < convoIds.length; i += CONVO_BATCH_SIZE) {
     const batch = convoIds.slice(i, i + CONVO_BATCH_SIZE);
     const msgParams = new URLSearchParams({
-      sysparm_display_value: "all",
       sysparm_fields: "sys_id,conversation,content,sys_created_on",
       sysparm_query: `conversationIN${batch.join(",")}^ORDERBYsys_created_on`,
-      sysparm_limit: "10000",
     });
-    const { result: batchMsgs } = await request(`${BASE}/sn_build_agent_message?${msgParams}`);
-    if (batchMsgs) allMessages.push(...batchMsgs);
+    const batchMsgs = await requestList(
+      "sn_build_agent_message",
+      msgParams,
+      "Messaggi (profilo utente)",
+      QUERY_LIMITS.messagesPerBatch
+    );
+    allMessages.push(...batchMsgs);
   }
   const messages = allMessages;
 
@@ -1197,30 +1321,28 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileData>
 
 // ─── Task Telemetry API ────────────────────────────────────────────────────────
 
+/**
+ * Task telemetry rows for the Performance view.
+ *
+ * `display_value=all` is KEPT: AgentPerformance.tsx renders `display(t.request)`
+ * and, more importantly, `display(t.start_time)` — the Date column would switch
+ * from the user's localized format to the raw internal UTC datetime if the
+ * display value disappeared. No `content`-style field is selected here.
+ */
 export async function fetchTaskTelemetry(query = "") {
   const params = new URLSearchParams({
     sysparm_display_value: "all",
     sysparm_fields:
-      "sys_id,user,request,task_type,status,agent_status,start_time,end_time,total_time,build_fix_cycles,build_fix_errors,rollbacks,lines_added,lines_edited,lines_deleted,metadata_types,sys_created_on",
+      "sys_id,user,request,task_type,status,agent_status,start_time,total_time,build_fix_cycles,build_fix_errors,rollbacks,lines_added,lines_edited,lines_deleted",
   });
   if (query) params.set("sysparm_query", query);
   else params.set("sysparm_query", "ORDERBYDESCstart_time");
-  const { result } = await request(
-    `${BASE}/sn_build_agent_task_telemetry?${params}`
+  return requestList(
+    "sn_build_agent_task_telemetry",
+    params,
+    "Telemetria task",
+    QUERY_LIMITS.taskTelemetry
   );
-  return result || [];
-}
-
-export async function fetchEventTelemetry(taskId: string) {
-  const params = new URLSearchParams({
-    sysparm_display_value: "all",
-    sysparm_query: `event_id=${taskId}^ORDERBYstart_time`,
-    sysparm_fields: "sys_id,name,status,start_time,end_time,total_time,build_fix_cycles,errors",
-  });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_event_telemetry?${params}`
-  );
-  return result || [];
 }
 
 export interface ToolErrorSummary {
@@ -1233,21 +1355,21 @@ export interface ToolErrorSummary {
 
 /**
  * Fetch all event telemetry records to aggregate tool-level errors.
- * Optionally filter by task IDs (e.g. only current user's tasks).
+ *
+ * `sysparm_display_value` REMOVED: the only consumer (AgentPerformance.tsx)
+ * reads `value(evt.name)`, `value(evt.status)`, `value(evt.errors)` and
+ * `value(evt.event_id)` — never a display value. `errors` can hold multi-KB
+ * build output, which "all" was sending twice.
  */
-export async function fetchAllEventTelemetry(taskIds?: string[]): Promise<any[]> {
-  let query = "ORDERBYDESCstart_time";
-  if (taskIds && taskIds.length > 0) {
-    query = `event_idIN${taskIds.join(",")}^${query}`;
-  }
+export async function fetchAllEventTelemetry(): Promise<any[]> {
   const params = new URLSearchParams({
-    sysparm_display_value: "all",
-    sysparm_query: query,
+    sysparm_query: "ORDERBYDESCstart_time",
     sysparm_fields: "sys_id,name,status,errors,event_id",
-    sysparm_limit: "5000",
   });
-  const { result } = await request(
-    `${BASE}/sn_build_agent_event_telemetry?${params}`
+  return requestList(
+    "sn_build_agent_event_telemetry",
+    params,
+    "Eventi tool",
+    QUERY_LIMITS.eventTelemetry
   );
-  return result || [];
 }

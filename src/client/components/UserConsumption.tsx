@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   fetchUserConsumption,
   fetchConsumptionMonths,
@@ -14,6 +14,14 @@ import { NauBreakdownPanel } from "./NauBreakdown.tsx";
 interface UserConsumptionProps {
   onNavigate: (view: string, id?: string, month?: string | null) => void;
 }
+
+/**
+ * Hoisted to module scope: DataTable is memoized, and an inline object literal
+ * would hand it a brand new `defaultSort` reference on every render. DataTable
+ * only reads it to seed its initial sort state, so sharing one frozen object
+ * changes nothing behaviourally.
+ */
+const DEFAULT_SORT = { key: "nauUnits", direction: "desc" } as const;
 
 function getCurrentMonth(): string {
   const now = new Date();
@@ -96,48 +104,60 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
     await loadData(selectedMonth);
   }, [selectedMonth]);
 
-  function handleSort(key: string, direction: "asc" | "desc") {
+  const handleSort = useCallback((key: string, direction: "asc" | "desc") => {
     setSortKey(key);
     setSortDir(direction);
-  }
+  }, []);
 
-  // Sort users
-  const sortedUsers = [...users].sort((a, b) => {
-    const aVal = (a as any)[sortKey];
-    const bVal = (b as any)[sortKey];
-    if (aVal == null && bVal == null) return 0;
-    if (aVal == null) return 1;
-    if (bVal == null) return -1;
-    let comparison = 0;
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      comparison = aVal - bVal;
-    } else {
-      comparison = String(aVal).localeCompare(String(bVal));
-    }
-    return sortDir === "asc" ? comparison : -comparison;
-  });
+  const handleRowClick = useCallback(
+    (row: any) => {
+      onNavigate("user-profile", row.userId);
+    },
+    [onNavigate]
+  );
+
+  // Sort users — memoized so typing in the search box no longer re-sorts the
+  // whole list (and so DataTable gets a stable `rows` reference).
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      const aVal = (a as any)[sortKey];
+      const bVal = (b as any)[sortKey];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      let comparison = 0;
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal).localeCompare(String(bVal));
+      }
+      return sortDir === "asc" ? comparison : -comparison;
+    });
+  }, [users, sortKey, sortDir]);
 
   // Apply search filter
-  const filteredUsers = searchQuery.trim()
-    ? sortedUsers.filter((user) => {
-        const q = searchQuery.toLowerCase();
-        return user.userName.toLowerCase().includes(q);
-      })
-    : sortedUsers;
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return sortedUsers;
+    const q = searchQuery.toLowerCase();
+    return sortedUsers.filter((user) => user.userName.toLowerCase().includes(q));
+  }, [sortedUsers, searchQuery]);
 
-  const columns: Column[] = [
-    { key: "userName", label: "User Name", sortable: true },
-    { key: "conversations", label: "Conversations", sortable: true },
-    { key: "userMessages", label: "User Messages", sortable: true },
-    {
-      key: "nauUnits",
-      label: "Now Assist Units",
-      sortable: true,
-      render: (row: any) => (
-        <NauBreakdownPanel breakdown={row.breakdown} compact />
-      ),
-    },
-  ];
+  const columns: Column[] = useMemo(
+    () => [
+      { key: "userName", label: "User Name", sortable: true },
+      { key: "conversations", label: "Conversations", sortable: true },
+      { key: "userMessages", label: "User Messages", sortable: true },
+      {
+        key: "nauUnits",
+        label: "Now Assist Units",
+        sortable: true,
+        render: (row: any) => (
+          <NauBreakdownPanel breakdown={row.breakdown} compact />
+        ),
+      },
+    ],
+    []
+  );
 
   if (loading && kpiLoading) return <SkeletonConsumptionView />;
 
@@ -231,11 +251,9 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
       <DataTable
         columns={columns}
         rows={filteredUsers}
-        onRowClick={(row) => {
-          onNavigate("user-profile", row.userId);
-        }}
+        onRowClick={handleRowClick}
         emptyMessage={searchQuery ? "No users match your search" : "No consumption data for this period"}
-        defaultSort={{ key: "nauUnits", direction: "desc" }}
+        defaultSort={DEFAULT_SORT}
         onSort={handleSort}
       />
     </div>

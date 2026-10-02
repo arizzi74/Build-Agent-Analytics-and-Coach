@@ -15,12 +15,11 @@
     "dependencies": {
         "react": "18.2.0",
         "react-dom": "18.2.0",
-        "@servicenow/react-components": "^0.1.0",
         "marked": "12.0.2",
         "mermaid": "10.9.3"
     },
     "devDependencies": {
-        "@servicenow/sdk": "4.10.1",
+        "@servicenow/sdk": "4.13.3",
         "@servicenow/glide": "27.0.5",
         "@types/react": "18.3.12"
     }

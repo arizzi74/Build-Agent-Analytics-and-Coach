@@ -24,6 +24,47 @@
   font-weight: 700;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TRUNCATION BANNER — partial data notice (severity: warning)
+   ───────────────────────────────────────────────────────────────────────────────
+   Shown above the current view when a Table API query returned exactly as many
+   records as its sysparm_limit (see services/truncation.ts). Discreet and
+   non-blocking: it borrows the geometry of .ba-kpi-disclaimer but, since it
+   carries a real "warning" severity, colours come exclusively from Horizon
+   `--now-*` alert tokens (with rgb fallbacks) instead of the app's own palette.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ba-truncation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ba-space-2);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: rgb(var(--now-alert_message--warning--color, 16, 23, 26));
+  background: rgb(var(--now-alert--warning--background-color, 251, 247, 191));
+  border: 1px solid rgb(var(--now-alert--warning--border-color, 246, 236, 96));
+  border-radius: var(--ba-radius-sm);
+  padding: var(--ba-space-2) var(--ba-space-4);
+  margin: 0 0 var(--ba-space-4) 0;
+}
+
+.ba-truncation-banner__icon {
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+.ba-truncation-banner__text {
+  min-width: 0;
+}
+
+.ba-truncation-banner__text strong {
+  font-weight: 700;
+}
+
+.ba-truncation-banner__contexts {
+  display: block;
+  opacity: 0.85;
+}
+
 .ba-kpi-card {
   position: relative;
   background: var(--ba-white);
@@ -526,29 +567,6 @@
   border-radius: var(--ba-radius);
   padding: var(--ba-space-5);
   text-align: center;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   SENDER BADGES
-   ═══════════════════════════════════════════════════════════════════════════════ */
-.ba-sender {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--ba-radius-pill);
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.ba-sender--user {
-  background: var(--ba-primary-100);
-  color: #047857;
-}
-
-.ba-sender--assistant {
-  background: #ccfbf1;
-  color: #0d9488;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

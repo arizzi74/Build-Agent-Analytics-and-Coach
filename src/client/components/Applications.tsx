@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { display, value } from "../utils/fields.ts";
 import {
   fetchConversations,
-  fetchAllMessages,
-  fetchAllCheckpoints,
+  fetchAggregateCountByGroup,
   fetchAppDetails,
   fetchTableCount,
   fetchDistinctCount,
@@ -32,6 +31,9 @@ interface AppStat {
 }
 
 const FAVORITES_KEY = "ba_favorite_apps";
+
+/** Module-level constant: a fresh object literal would break DataTable's React.memo. */
+const DEFAULT_SORT = { key: "lastActivityRaw", direction: "desc" as const };
 
 function loadFavorites(): Set<string> {
   try {
@@ -136,23 +138,21 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   /** Load full table data for the DataTable (per-app breakdown) */
   async function loadTableData() {
     try {
-      const [convos, msgs, chks] = await Promise.all([
+      // Message and checkpoint counts come from the Aggregate (Stats) API grouped
+      // by `conversation` — a DIRECT foreign key, so we stay clear of the
+      // dot-walked group_by ordering ambiguity. Previously the whole message and
+      // checkpoint tables were downloaded just to count rows client-side.
+      // The per-app rollup stays client-side, using the conversation→app map
+      // built from the conversation list below.
+      const [convos, msgByConvo, chkByConvo] = await Promise.all([
         track("Fetching conversations", () => fetchConversations("ORDERBYDESClast_message_at")),
-        track("Fetching messages", () => fetchAllMessages()),
-        track("Fetching checkpoints", () => fetchAllCheckpoints()),
+        track("Counting messages per conversation", () =>
+          fetchAggregateCountByGroup("sn_build_agent_message", "conversation")
+        ),
+        track("Counting checkpoints per conversation", () =>
+          fetchAggregateCountByGroup("sn_build_agent_checkpoint", "conversation")
+        ),
       ]);
-
-      const msgByConvo = new Map<string, number>();
-      msgs.forEach((m: any) => {
-        const cId = value(m.conversation);
-        msgByConvo.set(cId, (msgByConvo.get(cId) || 0) + 1);
-      });
-
-      const chkByConvo = new Map<string, number>();
-      chks.forEach((c: any) => {
-        const cId = value(c.conversation);
-        chkByConvo.set(cId, (chkByConvo.get(cId) || 0) + 1);
-      });
 
       // Build preliminary app map
       const appMap = new Map<string, AppStat>();
@@ -175,6 +175,8 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
           isFavorite: storedFavorites.has(appId),
         };
         existing.conversations += 1;
+        // A conversation with no messages/checkpoints simply has no group in the
+        // aggregate result: treat the absence as 0 (never undefined/NaN).
         existing.messages += msgByConvo.get(convoId) || 0;
         existing.checkpoints += chkByConvo.get(convoId) || 0;
         if (!existing.lastActivity) {
@@ -214,68 +216,83 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     }
   }
 
-  function handleSort(key: string, direction: "asc" | "desc") {
+  // Stable identities: DataTable is wrapped in React.memo, so an inline arrow or
+  // object literal here would defeat the memoization on every render.
+  const handleSortChange = useCallback((key: string, direction: "asc" | "desc") => {
     setSortKey(key);
     setSortDir(direction);
-  }
+  }, []);
 
-  // Sort: favorites pinned at top, then by user-selected column
-  const sortedApps = [...apps].map((app) => ({
-    ...app,
-    isFavorite: favorites.has(app.id),
-  })).sort((a, b) => {
-    // Favorites always on top
-    if (a.isFavorite && !b.isFavorite) return -1;
-    if (!a.isFavorite && b.isFavorite) return 1;
-    // Sort by selected column
-    const aVal = (a as any)[sortKey];
-    const bVal = (b as any)[sortKey];
-    if (aVal == null && bVal == null) return 0;
-    if (aVal == null) return 1;
-    if (bVal == null) return -1;
-    let comparison = 0;
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      comparison = aVal - bVal;
-    } else {
-      comparison = String(aVal).localeCompare(String(bVal));
-    }
-    return sortDir === "asc" ? comparison : -comparison;
-  });
+  const handleRowClick = useCallback(
+    (row: AppStat) => onNavigate("app-detail", row.id),
+    [onNavigate]
+  );
+
+  // Sort: favorites pinned at top, then by user-selected column.
+  // Memoized: without this the whole sort ran on every keystroke of the search box.
+  const sortedApps = useMemo(() => {
+    return [...apps]
+      .map((app) => ({
+        ...app,
+        isFavorite: favorites.has(app.id),
+      }))
+      .sort((a, b) => {
+        // Favorites always on top
+        if (a.isFavorite && !b.isFavorite) return -1;
+        if (!a.isFavorite && b.isFavorite) return 1;
+        // Sort by selected column
+        const aVal = (a as any)[sortKey];
+        const bVal = (b as any)[sortKey];
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+        let comparison = 0;
+        if (typeof aVal === "number" && typeof bVal === "number") {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDir === "asc" ? comparison : -comparison;
+      });
+  }, [apps, favorites, sortKey, sortDir]);
 
   // Apply search filter on name and description
-  const filteredApps = searchQuery.trim()
-    ? sortedApps.filter((app) => {
-        const q = searchQuery.toLowerCase();
-        return (
-          app.name.toLowerCase().includes(q) ||
-          app.description.toLowerCase().includes(q)
-        );
-      })
-    : sortedApps;
+  const filteredApps = useMemo(() => {
+    if (!searchQuery.trim()) return sortedApps;
+    const q = searchQuery.toLowerCase();
+    return sortedApps.filter(
+      (app) =>
+        app.name.toLowerCase().includes(q) ||
+        app.description.toLowerCase().includes(q)
+    );
+  }, [sortedApps, searchQuery]);
+
+  const columns: Column[] = useMemo(
+    () => [
+      {
+        key: "favorite",
+        label: "★",
+        render: (row: AppStat) => (
+          <button
+            className={`ba-star-btn ${row.isFavorite ? "ba-star-btn--active" : ""}`}
+            onClick={(e) => toggleFavorite(row.id, e)}
+            title={row.isFavorite ? "Remove from favorites" : "Add to favorites"}
+            aria-label={row.isFavorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            {row.isFavorite ? "★" : "☆"}
+          </button>
+        ),
+      },
+      { key: "name", label: "Application", sortable: true },
+      { key: "conversations", label: "Conversations", sortable: true },
+      { key: "messages", label: "Total Messages", sortable: true },
+      { key: "checkpoints", label: "Checkpoints", sortable: true },
+      { key: "lastActivity", label: "Last Activity", sortable: true, sortKey: "lastActivityRaw" },
+    ],
+    [toggleFavorite]
+  );
 
   if (loading && kpiLoading) return <SkeletonApplicationsView />;
-
-  const columns: Column[] = [
-    {
-      key: "favorite",
-      label: "★",
-      render: (row: AppStat) => (
-        <button
-          className={`ba-star-btn ${row.isFavorite ? "ba-star-btn--active" : ""}`}
-          onClick={(e) => toggleFavorite(row.id, e)}
-          title={row.isFavorite ? "Remove from favorites" : "Add to favorites"}
-          aria-label={row.isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          {row.isFavorite ? "★" : "☆"}
-        </button>
-      ),
-    },
-    { key: "name", label: "Application", sortable: true },
-    { key: "conversations", label: "Conversations", sortable: true },
-    { key: "messages", label: "Total Messages", sortable: true },
-    { key: "checkpoints", label: "Checkpoints", sortable: true },
-    { key: "lastActivity", label: "Last Activity", sortable: true, sortKey: "lastActivityRaw" },
-  ];
 
   return (
     <div className="ba-view">
@@ -343,10 +360,10 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
       <DataTable
         columns={columns}
         rows={filteredApps}
-        onRowClick={(row) => onNavigate("app-detail", row.id)}
+        onRowClick={handleRowClick}
         emptyMessage={searchQuery ? "No applications match your search" : "No applications found"}
-        defaultSort={{ key: "lastActivityRaw", direction: "desc" }}
-        onSort={handleSort}
+        defaultSort={DEFAULT_SORT}
+        onSort={handleSortChange}
       />
     </div>
   );

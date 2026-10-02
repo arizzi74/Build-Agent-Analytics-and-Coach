@@ -19,7 +19,6 @@ interface TaskRecord {
   status: any;
   agent_status: any;
   start_time: any;
-  end_time: any;
   total_time: any;
   build_fix_cycles: any;
   build_fix_errors: any;
@@ -27,8 +26,6 @@ interface TaskRecord {
   lines_added: any;
   lines_edited: any;
   lines_deleted: any;
-  metadata_types: any;
-  sys_created_on: any;
 }
 
 interface TaskRow {

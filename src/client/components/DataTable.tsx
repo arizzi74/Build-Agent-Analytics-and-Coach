@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 export interface Column {
   key: string;
@@ -18,7 +18,7 @@ interface DataTableProps {
   onSort?: (key: string, direction: "asc" | "desc") => void;
 }
 
-export default function DataTable({
+function DataTable({
   columns,
   rows,
   onRowClick,
@@ -45,8 +45,13 @@ export default function DataTable({
     }
   }
 
-  // If no external onSort handler, sort internally
-  const sortedRows = onSort ? rows : getSortedRows(rows, sortColumn, sortDirection);
+  // If no external onSort handler, sort internally.
+  // Memoized only — the internal-vs-external decision and the comparator are
+  // untouched, so the resulting order is identical to before.
+  const sortedRows = useMemo(
+    () => (onSort ? rows : getSortedRows(rows, sortColumn, sortDirection)),
+    [onSort, rows, sortColumn, sortDirection]
+  );
 
   if (!sortedRows.length) {
     return <div className="ba-empty">{emptyMessage}</div>;
@@ -138,3 +143,10 @@ function getSortedRows(rows: any[], sortColumn: string | null, sortDirection: "a
     return sortDirection === "asc" ? comparison : -comparison;
   });
 }
+
+/**
+ * Memoized: the table re-rendered on every parent render even when neither the
+ * columns nor the rows changed (e.g. opening a modal elsewhere in the view).
+ * Consumers keep importing the default export under the same name.
+ */
+export default React.memo(DataTable);

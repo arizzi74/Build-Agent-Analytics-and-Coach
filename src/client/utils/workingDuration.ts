@@ -150,39 +150,6 @@ export function getImplMinutes(allMessages: any[][]): number {
   return Math.round(totalMs / 60000);
 }
 
-// ─── Wall-Clock Duration ─────────────────────────────────────────────────────
-
-/**
- * Calculate wall-clock duration for a single conversation: elapsed time from
- * the first message to the last message regardless of sender.
- */
-export function calculateWallClockMs(messages: any[]): number {
-  const timestamps: number[] = [];
-
-  for (const msg of messages) {
-    const dateStr = fieldValue(msg.sys_created_on);
-    const date = parseDate(dateStr);
-    if (date) timestamps.push(date.getTime());
-  }
-
-  if (timestamps.length < 2) return 0;
-
-  const min = Math.min(...timestamps);
-  const max = Math.max(...timestamps);
-  return max - min;
-}
-
-/**
- * Format total wall-clock from an array of message arrays.
- */
-export function formatWallClock(allMessages: any[][]): string {
-  let totalMs = 0;
-  for (const msgs of allMessages) {
-    totalMs += calculateWallClockMs(msgs);
-  }
-  return formatDurationMs(totalMs);
-}
-
 // ─── Average Interaction Time & Average Pause Time ───────────────────────────
 
 export interface DurationMetrics {

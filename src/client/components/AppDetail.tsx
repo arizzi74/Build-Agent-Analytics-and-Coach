@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { display, value, countMessagesBySender } from "../utils/fields.ts";
 import { formatImplDuration, getImplMinutes, calculateDurationMetrics, formatDurationMs } from "../utils/workingDuration.ts";
@@ -21,7 +21,7 @@ import {
   getTotalComponentCount,
   mergeWithDefaults,
 } from "../utils/complexity.ts";
-import type { ComplexityWeights, PartnerEstimates, ROIResult, CompositionKey } from "../utils/complexity.ts";
+import type { ComplexityWeights, PartnerEstimates, ROIResult } from "../utils/complexity.ts";
 import { useQueryTracker } from "../services/queryTracker.ts";
 import { SkeletonAppDetailView } from "./Skeleton.tsx";
 import KpiCard from "./KpiCard.tsx";
@@ -50,7 +50,6 @@ interface UserAggregate {
   assistantMessages: number;
   totalMessages: number;
   tokens: number;
-  checkpoints: number;
 }
 
 /** Group conversations by user and compute aggregates */
@@ -66,7 +65,6 @@ function aggregateByUser(convoData: ConvoWithCounts[]): UserAggregate[] {
         assistantMessages: 0,
         totalMessages: 0,
         tokens: 0,
-        checkpoints: 0,
       });
     }
     const agg = map.get(user)!;
@@ -75,7 +73,6 @@ function aggregateByUser(convoData: ConvoWithCounts[]): UserAggregate[] {
     agg.assistantMessages += c.assistantMessages;
     agg.totalMessages += c.totalMessages;
     agg.tokens += c.tokenUsage.total;
-    agg.checkpoints += c.checkpoints;
   }
   // Sort by total messages descending
   return Array.from(map.values()).sort((a, b) => b.totalMessages - a.totalMessages);
@@ -218,7 +215,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
   const [convoData, setConvoData] = useState<ConvoWithCounts[]>([]);
   const [totalUser, setTotalUser] = useState(0);
   const [totalAssistant, setTotalAssistant] = useState(0);
-  const [totalCheckpoints, setTotalCheckpoints] = useState(0);
   const [implDuration, setImplDuration] = useState("");
   const [implMinutes, setImplMinutes] = useState(0);
   const [durationMetrics, setDurationMetrics] = useState<DurationMetrics | null>(null);
@@ -282,7 +278,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
       // Fetch messages and checkpoints per conversation
       let userTotal = 0;
       let assistantTotal = 0;
-      let chkTotal = 0;
       const convoResults: ConvoWithCounts[] = [];
       const convoTokenUsages: ConversationTokenUsage[] = [];
       const allConvoMessages: any[][] = [];
@@ -298,7 +293,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         const counts = countMessagesBySender(msgs);
         userTotal += counts.user;
         assistantTotal += counts.assistant;
-        chkTotal += chks.length;
 
         const tokenUsage = analyzeConversation(msgs);
         convoTokenUsages.push(tokenUsage);
@@ -317,7 +311,6 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
       setTotalUser(userTotal);
       setTotalAssistant(assistantTotal);
-      setTotalCheckpoints(chkTotal);
       setConvoData(convoResults);
 
       const appUsage = aggregateApplicationUsage(convoTokenUsages);
@@ -374,41 +367,83 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
     }
   }
 
+  // --- Memoized derivations -------------------------------------------------
+  // Every hook below MUST stay above the `loading` early return, so the hook
+  // order is identical on the skeleton render and on the loaded render.
+
+  // Complexity depends on the scan result AND on the user-editable weights
+  // (persisted through settings): leaving `weights` out of the deps would freeze
+  // the score on whatever was loaded at mount.
+  const complexScore = useMemo(
+    () => (composition ? calculateComplexity(composition, weights) : 0),
+    [composition, weights]
+  );
+
+  // Same reasoning for the partner hour estimates, which the user can edit.
+  const manualHours = useMemo(
+    () => (composition ? calculateManualHours(composition, estimates) : 0),
+    [composition, estimates]
+  );
+
+  const roi = useMemo<ROIResult | null>(
+    () => (composition && implMinutes > 0 ? calculateROI(manualHours, implMinutes) : null),
+    [composition, manualHours, implMinutes]
+  );
+
+  const totalComponents = useMemo(
+    () => (composition ? getTotalComponentCount(composition) : 0),
+    [composition]
+  );
+
+  // Per-author rollup: walks every conversation and its token totals, then sorts.
+  const userAggregates = useMemo(() => aggregateByUser(convoData), [convoData]);
+
+  // Column definitions are constant shapes (they only close over module-level
+  // helpers), so an empty dep list is correct — and it gives the now-memoized
+  // DataTable a stable `columns` reference.
+  const userAggColumns = useMemo(
+    () => [
+      { key: "user", label: "Author", render: (r: UserAggregate) => r.user },
+      { key: "conversations", label: "Conversations", render: (r: UserAggregate) => r.conversations },
+      { key: "userMessages", label: "User Msgs", render: (r: UserAggregate) => r.userMessages },
+      { key: "assistantMessages", label: "Assistant Msgs", render: (r: UserAggregate) => r.assistantMessages },
+      { key: "tokens", label: "Est. Tokens", render: (r: UserAggregate) => `~${formatTokenCount(r.tokens)}` },
+      { key: "nowAssistUnits", label: "NowAssist Units", render: (r: UserAggregate) => (r.userMessages * NOWASSIST_UNIT_COST).toLocaleString("de-DE") },
+    ],
+    []
+  );
+
+  const columns = useMemo(
+    () => [
+      { key: "title", label: "Conversation", render: (r: ConvoWithCounts) => display(r.raw.title) || "Untitled" },
+      { key: "author", label: "Author", render: (r: ConvoWithCounts) => display(r.raw.user) || "—" },
+      { key: "userMessages", label: "User Msgs", render: (r: ConvoWithCounts) => r.userMessages },
+      { key: "assistantMessages", label: "Assistant Msgs", render: (r: ConvoWithCounts) => r.assistantMessages },
+      { key: "tokens", label: "Est. Tokens", render: (r: ConvoWithCounts) => `~${formatTokenCount(r.tokenUsage.total)}` },
+      { key: "checkpoints", label: "Checkpoints", render: (r: ConvoWithCounts) => r.checkpoints },
+      { key: "state", label: "State", render: (r: ConvoWithCounts) => display(r.raw.state) },
+      { key: "date", label: "Last Activity", render: (r: ConvoWithCounts) => display(r.raw.last_message_at) },
+    ],
+    []
+  );
+
+  // Stable callbacks: without these, the fresh closures created on every render
+  // would defeat React.memo on DataTable / KpiCard.
+  const handleConversationClick = useCallback(
+    (row: ConvoWithCounts) => onNavigate("conversation", value(row.raw.sys_id)),
+    [onNavigate]
+  );
+  const showUserKpiInfo = useCallback(() => setKpiInfoKey("user"), []);
+  const showAssistantKpiInfo = useCallback(() => setKpiInfoKey("assistant"), []);
+  const showDurationKpiInfo = useCallback(() => setKpiInfoKey("duration"), []);
+  const showCostKpiInfo = useCallback(() => setKpiInfoKey("cost"), []);
+
   if (loading) return <SkeletonAppDetailView />;
 
   const nowAssistUnits = totalUser * NOWASSIST_UNIT_COST;
 
-  // Complexity & ROI calculations
-  const complexScore = composition ? calculateComplexity(composition, weights) : 0;
+  // Not memoized on purpose: a threshold lookup over an already-memoized score.
   const complexLabel = composition ? complexityLabel(complexScore) : null;
-  const manualHours = composition ? calculateManualHours(composition, estimates) : 0;
-  const roi: ROIResult | null = composition && implMinutes > 0
-    ? calculateROI(manualHours, implMinutes)
-    : null;
-  const totalComponents = composition ? getTotalComponentCount(composition) : 0;
-
-  // Compute user aggregates
-  const userAggregates = aggregateByUser(convoData);
-
-  const userAggColumns = [
-    { key: "user", label: "Author", render: (r: UserAggregate) => r.user },
-    { key: "conversations", label: "Conversations", render: (r: UserAggregate) => r.conversations },
-    { key: "userMessages", label: "User Msgs", render: (r: UserAggregate) => r.userMessages },
-    { key: "assistantMessages", label: "Assistant Msgs", render: (r: UserAggregate) => r.assistantMessages },
-    { key: "tokens", label: "Est. Tokens", render: (r: UserAggregate) => `~${formatTokenCount(r.tokens)}` },
-    { key: "nowAssistUnits", label: "NowAssist Units", render: (r: UserAggregate) => (r.userMessages * NOWASSIST_UNIT_COST).toLocaleString("de-DE") },
-  ];
-
-  const columns = [
-    { key: "title", label: "Conversation", render: (r: ConvoWithCounts) => display(r.raw.title) || "Untitled" },
-    { key: "author", label: "Author", render: (r: ConvoWithCounts) => display(r.raw.user) || "—" },
-    { key: "userMessages", label: "User Msgs", render: (r: ConvoWithCounts) => r.userMessages },
-    { key: "assistantMessages", label: "Assistant Msgs", render: (r: ConvoWithCounts) => r.assistantMessages },
-    { key: "tokens", label: "Est. Tokens", render: (r: ConvoWithCounts) => `~${formatTokenCount(r.tokenUsage.total)}` },
-    { key: "checkpoints", label: "Checkpoints", render: (r: ConvoWithCounts) => r.checkpoints },
-    { key: "state", label: "State", render: (r: ConvoWithCounts) => display(r.raw.state) },
-    { key: "date", label: "Last Activity", render: (r: ConvoWithCounts) => display(r.raw.last_message_at) },
-  ];
 
   return (
     <div className="ba-view">
@@ -424,15 +459,15 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         {convoData.length} conversation{convoData.length !== 1 ? "s" : ""} over time
       </p>
       <div className="ba-kpi-row">
-        <KpiCard title="User Messages" value={totalUser} icon="user" onClick={() => setKpiInfoKey("user")} />
-        <KpiCard title="Assistant Messages" value={totalAssistant} icon="assistant" onClick={() => setKpiInfoKey("assistant")} />
-        <KpiCard title="Impl. Duration" value={implDuration || "—"} icon="duration" onClick={() => setKpiInfoKey("duration")} />
+        <KpiCard title="User Messages" value={totalUser} icon="user" onClick={showUserKpiInfo} />
+        <KpiCard title="Assistant Messages" value={totalAssistant} icon="assistant" onClick={showAssistantKpiInfo} />
+        <KpiCard title="Impl. Duration" value={implDuration || "—"} icon="duration" onClick={showDurationKpiInfo} />
         <KpiCard
           title="NowAssist Units"
           value={nowAssistUnits.toLocaleString("de-DE")}
           icon="cost"
           tooltip={`${totalUser} user messages × ${NOWASSIST_UNIT_COST} NowAssist units = ${nowAssistUnits.toLocaleString("de-DE")}`}
-          onClick={() => setKpiInfoKey("cost")}
+          onClick={showCostKpiInfo}
         />
       </div>
 
@@ -634,7 +669,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         <DataTable
           columns={columns}
           rows={convoData}
-          onRowClick={(row) => onNavigate("conversation", value(row.raw.sys_id))}
+          onRowClick={handleConversationClick}
         />
       </div>
 

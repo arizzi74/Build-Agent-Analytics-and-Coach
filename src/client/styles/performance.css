@@ -166,38 +166,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
    BUILD ERRORS
    ═══════════════════════════════════════════════════════════════════════════════ */
-.ba-error-detail {
-  padding: var(--ba-space-4) var(--ba-space-5);
-  background: #fef2f2;
-  border-left: 3px solid #e11d48;
-  animation: ba-slideDown var(--ba-duration) var(--ba-ease) both;
-}
-
-.ba-error-detail__header {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: #be123c;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: var(--ba-space-2);
-}
-
-.ba-error-detail__content {
-  font-size: 0.75rem;
-  font-family: var(--ba-font-mono);
-  color: #4b5563;
-  background: #fff;
-  border: 1px solid #fecaca;
-  border-radius: var(--ba-radius-sm);
-  padding: var(--ba-space-3) var(--ba-space-4);
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 280px;
-  overflow-y: auto;
-  line-height: 1.5;
-}
-
 .ba-build-cycles {
   display: inline-flex;
   align-items: center;
