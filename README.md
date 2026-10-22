@@ -186,11 +186,11 @@ Open **Coach settings** (`?view=coach-settings`) and save your personal settings
 
 Each checkpoint includes the prompts and sanitized assistant summaries through that event, plus up to eight accumulated coaching behaviors for that same conversation. Raw tool inputs/results, private reasoning and attachment bodies are excluded. The model can return no tip; an actionable tip must have conversation evidence, and repeated tips are suppressed. Failed tools do not by themselves establish a prompt mistake. Checkpoints are deduplicated and serialized per conversation, with expiring leases and five-minute model timeouts. Changing settings invalidates pending results. Transient prepared inputs are cleared when work completes or fails.
 
-**Active coach** independently enables a floating, glowing Otto icon at the top right of the native Build Agent interface. With automatic coaching enabled, it shows a balloon when a new relevant tip arrives. Write an unsent draft, then click Otto to request a revision. This also works for the first prompt in a new chat, without creating a Build Agent conversation. The popup shows the original, proposal and reason. **Apply revision** changes only the draft; **Cancel** leaves it untouched. Editing the draft or switching conversations invalidates the proposal. Nothing is submitted automatically.
+**Active coach** independently enables a floating, glowing Otto icon at the top right of the native Build Agent interface, in both ServiceNow Studio (`/sn_glider_app/servicenow_studio.do`) and ServiceNow IDE (`/sn_glider_app/ide.do`). With automatic coaching enabled, it shows a balloon when a new relevant tip arrives. Write an unsent draft, then click Otto to request a revision. This also works for the first prompt in a new chat, without creating a Build Agent conversation. The popup shows the original, proposal and reason. **Apply revision** changes only the draft; **Cancel** leaves it untouched. Editing the draft or switching conversations invalidates the proposal. Nothing is submitted automatically.
 
 Settings and APIs are bound to the signed-in user, even for administrators. Background work derives its owner from the native conversation and requires an active owner with `admin` or `sn_glider.admin`, current opt-in, and a non-internal conversation. Foreground requests also check native conversation/message ACLs. This service authorization matches the inspected MAIN native ACLs; installations with additional domain or custom access restrictions must extend that policy. Memory is private to its owner and conversation, with normal platform administrator access.
 
-The persistent overlay has two deployment parts: app-owned metadata (including `x_snc_build_agranx.active_coach` UI script) and a separate native Studio update set inserting one external script tag into the existing `sn_glider` UI page. `deployment/active_coach_studio_loader.py` prepares that exact, idempotent local change from a captured page record; it preserves the native scope and refuses unexpected page structure. Keep the original record for rollback and review the customization after Studio upgrades. The native extension registry runs extensions in workers and does not expose the composer DOM, so this loader is a Studio customization.
+The persistent overlay has two deployment parts: app-owned metadata (including `x_snc_build_agranx.active_coach` UI script) and native `sn_glider` update sets inserting one external script tag into each supported page: `app/servicenow_studio` and `app/ide`. Both pages need the loader. `deployment/active_coach_studio_loader.py` prepares that exact, idempotent local change from a captured page record; it validates each page's identity, preserves its native scope, and refuses unexpected page structure. Reload an already open editor after installing its loader. Keep the original records for rollback and review these customizations after Studio or IDE upgrades. The native extension registry runs extensions in workers and does not expose the composer DOM, so the loaders customize the native pages.
 
 ### Consumption
 
@@ -296,6 +296,9 @@ npm install
 # Check the client/server code and coaching normalization/response tests
 npm run typecheck
 npm test
+
+# Check native Studio/IDE loader identity and content preservation
+python3 -m unittest discover -s tests -p 'test_active_coach_studio_loader.py'
 
 # Build the application
 npm run build

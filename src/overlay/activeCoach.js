@@ -1,5 +1,5 @@
-/* Build Agent Active Coach. Loaded by the installed Studio extension, never by a browser test.
- * Native adapters may supply getContext(): { conversationId, input } when Studio exposes it.
+/* Build Agent Active Coach. Loaded by the installed native Studio and IDE page loaders.
+ * Native adapters may supply getContext(): { conversationId, input } when Studio or IDE exposes it.
  * No prompt is submitted, modified, or persisted by this module before the user's Apply click.
  */
 (function (global) {
@@ -489,7 +489,7 @@
 
   global.BAActiveCoach = { version: "1.0.0", start: start, stop: function () { if (instance) instance.stop(); instance = null; } };
   if (global.BA_ACTIVE_COACH_CONFIG) start(global.BA_ACTIVE_COACH_CONFIG);
-  else if (global.location && (/^\/sn_glider_app\/servicenow_studio\.do\/?$/.test(global.location.pathname) || /^\/now\/servicenow-studio(?:\/|$)/.test(global.location.pathname))) {
+  else if (global.location && (/^\/sn_glider_app\/(?:servicenow_studio|ide)\.do\/?$/.test(global.location.pathname) || /^\/now\/servicenow-studio(?:\/|$)/.test(global.location.pathname))) {
     start({ apiBase: DEFAULT_BASE });
   }
 })(window);

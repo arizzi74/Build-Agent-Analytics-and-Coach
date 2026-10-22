@@ -16,7 +16,7 @@ The metadata comparison documented only narrow platform normalizations for previ
 
 ## Deployment considerations
 
-The floating overlay uses a **native Studio page customization**: one external script tag loads the app-owned UI script. The [loader preparer](active_coach_studio_loader.py) checks the exact native page identity and structure, preserves its scope, and supports repeatable packaging. Retain the original page for rollback and review the customization after Studio upgrades. The inspected native extension registry provides worker-based extensions, without a supported composer-DOM integration API.
+The floating overlay uses **native Studio and IDE page customizations**: each page has one external script tag loading the app-owned UI script. The [loader preparer](active_coach_studio_loader.py) checks each supported native page's exact identity and structure, preserves its scope, and supports repeatable packaging. Retain the original pages for rollback and review the customizations after Studio or IDE upgrades. The inspected native extension registry provides worker-based extensions, without a supported composer-DOM integration API.
 
 Background authorization checks the native conversation owner, active-user status, Build Agent role, and current opt-in. Foreground requests additionally enforce native conversation/message ACLs. This matches the inspected MAIN access policy; additional domain or custom access restrictions require corresponding authorization changes.
 
@@ -34,3 +34,13 @@ The SDK did not emit the declared nonunique `coach_work_queue` composite index. 
 The live test exposed a native insert behavior: `previous` can contain the inserted completed-tool values. The hook now examines previous completion state only for updates; unique request keys still prevent duplicate work. A fresh native completion verified the correction. The two earlier test completions were retained as diagnostic evidence and were not replayed. Revision instructions were also refined and retested so proposed text remains a user-to-Build-Agent prompt.
 
 The test restored the user's original settings: **automatic coaching off and active coach off**. Disposable unsent drafts were cleared. The dedicated read-only test conversation and its coaching memory were preserved for inspection. Enable the desired settings under **BA Analytics → Coach settings**.
+
+## IDE URL compatibility correction
+
+The initial live verification covered `/sn_glider_app/servicenow_studio.do`. A subsequent user report identified that `/sn_glider_app/ide.do` uses the separate native `app/ide` page, which had no loader; the overlay's startup allowlist also omitted that route. The user's enabled settings were correct.
+
+On **22 October 2026**, two separate one-record native update sets corrected MAIN: the app-owned UI script now recognizes the IDE route, and native `app/ide` now includes the same loader. Both commits had zero preview problems and no deletions. Read-back verified the exact reviewed script and HTML, with every unrelated non-audit field preserved. TEST was not changed.
+
+**136 Node tests, 6 Python loader tests, and 24 mocked Playwright checks passed.** The added route regression tests fail against the previous overlay and pass with the correction. Live Playwright verification on the reported IDE workspace URL confirmed automatic script loading, the glowing upper-right icon, the guidance balloon, and visibility after reload. No prompt was submitted or model request made for this compatibility test. The user's current automatic and active coaching settings were both enabled and were preserved.
+
+An IDE tab opened before this correction must be reloaded to load the new page integration.
