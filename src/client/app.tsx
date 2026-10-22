@@ -15,6 +15,7 @@ import "./styles/shared.css";
 import "./styles/applications.css";
 import "./styles/app-detail.css";
 import "./styles/conversation.css";
+import "./styles/coaching.css";
 import "./styles/performance.css";
 import "./styles/timeseries.css";
 import "./styles/consumption.css";

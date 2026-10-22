@@ -10,6 +10,7 @@ import MarkdownRenderer from "./MarkdownRenderer.tsx";
 import { NauBreakdownPanel } from "./NauBreakdown.tsx";
 import RunScriptModal from "./RunScriptModal.tsx";
 import { exportConversationAsHtml } from "../utils/conversationExport.ts";
+import ConversationCoaching from "./ConversationCoaching.tsx";
 
 interface ConversationDetailProps {
   conversationId: string;
@@ -980,6 +981,8 @@ export default function ConversationDetail({
           <NauBreakdownPanel breakdown={nauBreakdown} />
         </div>
       )}
+
+      <ConversationCoaching conversationId={conversationId} />
 
       {/* Chat-style conversation */}
       <div className="ba-section">

@@ -6,3 +6,8 @@ target/
 *.tsbuildinfo
 .jest_cache
 docs
+
+# Local credentials and instance-specific inspection/test artifacts
+.secrets
+.secrets.*
+inspection/

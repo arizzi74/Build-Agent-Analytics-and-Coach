@@ -58,6 +58,10 @@ declare global {
                         id: '2a84c5722fc34310cebb654fafa4e3c4'
                         deleted: true
                     }
+                    '2fd544523b441b50d0c6ab7e53e45a9d': {
+                        table: 'sys_generative_ai_config'
+                        id: '2fd544523b441b50d0c6ab7e53e45a9d'
+                    }
                     '34ca09da2f9f4350cebb654fafa4e32c': {
                         table: 'sys_wdf_external_connection_mapping'
                         id: '34ca09da2f9f4350cebb654fafa4e32c'
@@ -75,6 +79,10 @@ declare global {
                     '56a2510e2fd38f10cebb654fafa4e325': {
                         table: 'sys_cs_context_profile_skill'
                         id: '56a2510e2fd38f10cebb654fafa4e325'
+                    }
+                    '5bd5c0123b441b50d0c6ab7e53e45a7f': {
+                        table: 'sys_generative_ai_config'
+                        id: '5bd5c0123b441b50d0c6ab7e53e45a7f'
                     }
                     '5e84c5722fc34310cebb654fafa4e39a': {
                         table: 'sys_scope_privilege'
@@ -192,6 +200,51 @@ declare global {
                         table: 'sys_module'
                         id: '7f2cb520afea4c34ab4b08b8d981d777'
                     }
+                    build_skill_callback: {
+                        table: 'sys_script_include'
+                        id: 'c2ab75ea288c48348a5925dc36c4bc7f'
+                    }
+                    build_skill_draft_create: {
+                        table: 'sys_security_acl'
+                        id: '9ee8cbf0842a4dff9c4acb88336135ff'
+                    }
+                    build_skill_draft_delete: {
+                        table: 'sys_security_acl'
+                        id: 'eeae2af372dc452190e0f98d3245ce1b'
+                    }
+                    build_skill_draft_read: {
+                        table: 'sys_security_acl'
+                        id: '255fca07cfda4f928adbb363dda8a4e4'
+                    }
+                    build_skill_draft_route: {
+                        table: 'sys_ws_operation'
+                        id: '694f0dda26cb4e59a1440da22ba685a7'
+                    }
+                    build_skill_draft_write: {
+                        table: 'sys_security_acl'
+                        id: '20bdde9e57584329b05c808f56c3e2a2'
+                    }
+                    build_skill_install_route: {
+                        table: 'sys_ws_operation'
+                        id: '1bc602cc350f4a95b1f8712a0bb7efec'
+                    }
+                    build_skill_native_create: {
+                        table: 'sys_scope_privilege'
+                        id: 'df825573e21645a0b6ab014f2b977e6a'
+                    }
+                    build_skill_native_read: {
+                        table: 'sys_scope_privilege'
+                        id: '082b46a2219345a784b86519ab0326dc'
+                    }
+                    build_skill_preview_route: {
+                        table: 'sys_ws_operation'
+                        id: '66e2d214bfb04f22ab13377dd4cf41f6'
+                    }
+                    build_skill_user_read: {
+                        table: 'sys_scope_privilege'
+                        id: '589c1c8c87bd428eb3bba58edc64a4f1'
+                        deleted: true
+                    }
                     'build-agent-analytics-menu': {
                         table: 'sys_app_application'
                         id: 'e00f541a4cc945a7aeb71f09a67d3742'
@@ -209,6 +262,92 @@ declare global {
                         table: 'oauth_entity_scope'
                         id: 'ccda09da2f9f4350cebb654fafa4e3ab'
                         deleted: true
+                    }
+                    coaching_analyze_route: {
+                        table: 'sys_ws_operation'
+                        id: '5635b36d84b443d988aa08a337dcf8b7'
+                    }
+                    coaching_api: {
+                        table: 'sys_ws_definition'
+                        id: 'c16afdcefefd4aa7886a184c8b56b4cd'
+                    }
+                    coaching_api_access: {
+                        table: 'sys_security_acl'
+                        id: '9226cdd4495c45a69106128b94ff59bf'
+                    }
+                    coaching_callback: {
+                        table: 'sys_script_include'
+                        id: '3cdd976898584d689a99b6742a68c90a'
+                    }
+                    coaching_capability_read: {
+                        table: 'sys_scope_privilege'
+                        id: '4af005190cd4496f8e02c5900e532150'
+                    }
+                    coaching_config_read: {
+                        table: 'sys_scope_privilege'
+                        id: 'f3081e56829f4633ad121ef89f726cac'
+                    }
+                    coaching_definition_read: {
+                        table: 'sys_scope_privilege'
+                        id: 'c6c25538165445df810c8cd603f25358'
+                    }
+                    coaching_feature_read: {
+                        table: 'sys_scope_privilege'
+                        id: '4228ca9741074391a8b4ee6e2ab06f9c'
+                        deleted: true
+                    }
+                    coaching_flow_read: {
+                        table: 'sys_scope_privilege'
+                        id: 'aaf7ced5370242dd877e51f0a8bab9a0'
+                    }
+                    coaching_invocation_read: {
+                        table: 'sys_scope_privilege'
+                        id: '1e8022cfb80a4c01b907dbba5ee4ff11'
+                        deleted: true
+                    }
+                    coaching_job_create: {
+                        table: 'sys_security_acl'
+                        id: '79c745b1c030496abeb8cb5db724cf0e'
+                    }
+                    coaching_job_delete: {
+                        table: 'sys_security_acl'
+                        id: '351009cb0de94b2fbcf0684059129ad1'
+                    }
+                    coaching_job_read: {
+                        table: 'sys_security_acl'
+                        id: '79d6bf92274145f5a103d638dcb0bc05'
+                    }
+                    coaching_job_route: {
+                        table: 'sys_ws_operation'
+                        id: '8097132d57094a879dc340d3b44cb42c'
+                    }
+                    coaching_job_write: {
+                        table: 'sys_security_acl'
+                        id: 'd6eaace477ce49528f47e66c65bc323c'
+                    }
+                    coaching_mapping_read: {
+                        table: 'sys_scope_privilege'
+                        id: '1f2f2e0c2dde41c489f6d85ea0259cae'
+                    }
+                    coaching_model_catalog_read: {
+                        table: 'sys_scope_privilege'
+                        id: '918908b31a1f4055903ab85c21bd1011'
+                    }
+                    coaching_models_route: {
+                        table: 'sys_ws_operation'
+                        id: 'daad21426c9b49b9a61efae3553e0897'
+                    }
+                    coaching_one_extend_execute: {
+                        table: 'sys_scope_privilege'
+                        id: '3a0601ff356e42c69e5204521991580d'
+                    }
+                    coaching_prepare_route: {
+                        table: 'sys_ws_operation'
+                        id: '176248a73e77485ea263e79f5a7ded2c'
+                    }
+                    coaching_prompt_config_read: {
+                        table: 'sys_scope_privilege'
+                        id: '29723ce4413b496c93306938781f26de'
                     }
                     e538a6cc3b8a0b949a1600b693e45a68: {
                         table: 'sys_openapi_operation'
@@ -257,6 +396,22 @@ declare global {
                         table: 'sys_module'
                         id: '165e12c0eb314e96b629622ed6c40f99'
                     }
+                    src_server_buildSkill_ts: {
+                        table: 'sys_module'
+                        id: '9fe3cbf2b4c24fffba746be1dad69b33'
+                    }
+                    src_server_buildSkillPreparation_js: {
+                        table: 'sys_module'
+                        id: 'b199c74d47a74d3896e136d11b8c1a7a'
+                    }
+                    src_server_coaching_ts: {
+                        table: 'sys_module'
+                        id: '05d4cb81a50f49238542b4289d41c64e'
+                    }
+                    src_server_coachingPreparation_js: {
+                        table: 'sys_module'
+                        id: 'e2a4c810c2444b3ca601bbf73c0b80c6'
+                    }
                     'styles/conversation.css': {
                         table: 'sys_ux_theme_asset'
                         id: 'd1a764e2335146cf8d6b32e179d6d077'
@@ -283,6 +438,23 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '02136afff74c4711a7f47e9d41a6d776'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'capability_id'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '03534d9615b3493e8f2e856630e9ae77'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'capability_id'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '03ae109972654e0c8af8793d8276c011'
                         deleted: false
@@ -300,10 +472,27 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_index'
+                        id: '07ac284b33c746b99493ac7d47879bb7'
+                        key: {
+                            logical_table_name: 'x_snc_build_agranx_coaching_job'
+                            col_name_string: 'request_key'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '07faacdd4b244dbb8c061f4e251437b5'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-cytoscape--68a9e77b'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '0acf67cfdd434b3694aa43f6fdd1f719'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'source_hash'
                         }
                     },
                     {
@@ -312,6 +501,15 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/blockDiagram-38ab4fdb'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '0c3fb6d0ff7a4a7ea0be463fb826f8fd'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'NULL'
+                            language: 'en'
                         }
                     },
                     {
@@ -324,11 +522,37 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '0de15fb0577c4528882a534149928e96'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'prompt_config_id'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '10777b4d6a4243eb96426e768417a667'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'source_json'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '1106fe036b914e2086a840c3745227d0'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/gitGraphDiagram-72cf32ee.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '125bb9f9e8604664898f52f57a00c9a1'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'model_label'
+                            language: 'en'
                         }
                     },
                     {
@@ -382,6 +606,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '1c60d7554315401eb7abbf44b5a0c7f3'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'conversation_id'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '1cb74eceafcb4e31aef32a359f35da31'
                         deleted: false
@@ -400,6 +633,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '21234c5de80d4c83afac45d8a4a997e6'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--fd7cf4ee.js.map'
                         }
@@ -411,6 +645,21 @@ declare global {
                             name: 'x_snc_build_agranx_settings'
                             element: 'value'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '23018fea078343f4819e7a5c21f9e0b8'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'prepared_json'
+                        }
+                    },
+                    {
+                        table: 'sys_db_object'
+                        id: '23b0bda910da4cde84e1f9423d8f32c8'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
                         }
                     },
                     {
@@ -439,8 +688,22 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '27e223599b374438ba47533679cfb63f'
+                        key: {
+                            sys_security_acl: 'd6eaace477ce49528f47e66c65bc323c'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '2824b17d86494f22b6a0839c2dcc36fd'
+                        deleted: true
                         key: {
                             application_file: '54a61a60163e44dc8bedaffbb94a856f'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -464,6 +727,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '2a2c2d16df034be0a685cb554aeaa137'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'status'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_dictionary'
                         id: '2a67b279d2aa4d7994c6afc892b943c8'
                         key: {
@@ -480,10 +752,27 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '2cd4d47b99fe4544b22be5cf9a8e6d1f'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'NULL'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_gen_ai_skill_config'
                         id: '2da2ddca2fd38f10cebb654fafa4e346'
                         key: {
                             skill_id: '7ca21dca2fd38f10cebb654fafa4e38b'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '2fefa424e60a494b8dcaacecaaaef3cd'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'requested_by'
                         }
                     },
                     {
@@ -520,6 +809,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_ux_lib_asset'
+                        id: '330f963d78fd4c38ab76328cf20da209'
+                        deleted: true
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--b57a642b'
+                        }
+                    },
+                    {
                         table: 'sn_aia_agent_tool_m2m'
                         id: '344b52e67cf543f7a490a52c8085b398'
                         key: {
@@ -529,12 +826,44 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '34613da11d40416fa4fcf92eefa32cc6'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'result_json'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '34f1507bc04f4768b95e7dc087058249'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'NULL'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '358cea7d69e64f69bfe2bb58440532de'
+                        key: {
+                            application_file: '767da624d2054c65bed5b7b251760353'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '366c16ad6b4d49dd8bedb15cde4c2cdc'
                         deleted: true
                         key: {
                             application_file: '3196a1c2b76a442196504edc05428c03'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '3763dbdb40204b978ef5b1360f6baaa9'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'request_key'
                         }
                     },
                     {
@@ -569,6 +898,15 @@ declare global {
                         key: {
                             application_file: '922dcb9faf644f42ba8e689b338bb153'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '3b0971fe41654cb19697ae33809367e7'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'status'
+                            language: 'en'
                         }
                     },
                     {
@@ -630,6 +968,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '3fcfff2886b9424ca984c142906d975e'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-cytoscape--68a9e77b.js.map'
                         }
@@ -644,6 +983,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '431170779cfa4114bc682cb6a1c4d6f2'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'conversation_owner'
+                        }
+                    },
+                    {
                         table: 'sys_db_object'
                         id: '4322452993f7476cb1568a87fce32eec'
                         key: {
@@ -655,6 +1002,14 @@ declare global {
                         id: '44b07e4e3c5147368ee1b5435bb4ea29'
                         key: {
                             name: 'x_snc_build_agranx/main'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '465283a456994c86994a4da50388caba'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'prompt_config_id'
                         }
                     },
                     {
@@ -680,6 +1035,13 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/requirementDiagram-deff3bca'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '4cd5fbb370294105a0176b947de36488'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--24cacbda.js.map'
                         }
                     },
                     {
@@ -716,8 +1078,22 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '54a61a60163e44dc8bedaffbb94a856f'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--fd7cf4ee'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '54c3de8bfedc4e5995453c41943e71da'
+                        key: {
+                            sys_security_acl: '20bdde9e57584329b05c808f56c3e2a2'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
                         }
                     },
                     {
@@ -745,6 +1121,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '56cb0a02f7f140e6bd842d09f009d933'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'config_id'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '5905528dcef04f8d87ee15afd4469952'
                         deleted: false
@@ -762,6 +1147,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '5a574f41cd0b4feda3cf2bf31bb87e8c'
+                        deleted: true
                         key: {
                             application_file: '21234c5de80d4c83afac45d8a4a997e6'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -809,11 +1195,28 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '5e965654c9fd497d800172d3e3867e4d'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'prompt_config_id'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '5eaf2eebca3c493f92f945d8ed4d2dac'
                         key: {
                             application_file: '3bada59208df4d3386c4fd65c3cb793a'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '5f0d8ecfc4ee491fa19a8bdcbf559209'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'requested_by'
+                            language: 'en'
                         }
                     },
                     {
@@ -854,6 +1257,15 @@ declare global {
                         id: '6544bf6d062241a5864bdbef4608c065'
                         key: {
                             name: 'x_snc_build_agranx/vendor-elkjs--09472633'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '6595304fd3bb497cb15d3aea61792716'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'finished_at'
+                            language: 'en'
                         }
                     },
                     {
@@ -945,11 +1357,28 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '724201d890b74166ac6c59b6d1495d96'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'request_key'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '72a923a364dd40dcb306752134dc86ac'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/classDiagram-70f12bd4'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '75fdd5b42eec43d085d03309b6c76331'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'request_key'
+                            language: 'en'
                         }
                     },
                     {
@@ -962,11 +1391,43 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '7663f0aad0bc411996cc5b944a4b9ca2'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'source_hash'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '767da624d2054c65bed5b7b251760353'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--eec65716.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '769f6b7e465d4e40b3c4eb25f0360e95'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'conversation_id'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '76d39bdbf7de49038392843ea1d2e733'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/journeyDiagram-49397b02.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '78af43b13de04c17946b1dfc210cd5d4'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'model_label'
                         }
                     },
                     {
@@ -994,6 +1455,57 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '7ea37d99150542079466fa483ce4961f'
+                        key: {
+                            sys_security_acl: '9ee8cbf0842a4dff9c4acb88336135ff'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_index'
+                        id: '80d3c417d97e4968916f5fd05a5f2ce4'
+                        key: {
+                            logical_table_name: 'x_snc_build_agranx_coaching_job'
+                            col_name_string: 'requested_by,conversation_id,model,input_hash'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '813da5015d854754afb6676616d3e12a'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'finished_at'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '83d4595ec0e5449a8de0d606509e597c'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'model'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: '84b9c80be9c84c16ae2496849ac969a5'
+                        key: {
+                            sys_security_acl: '255fca07cfda4f928adbb363dda8a4e4'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '8597be0ca2c64678acbb246740196202'
                         deleted: false
@@ -1010,6 +1522,24 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '8609d2f1ad884fcdb94a242adb07d324'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'requested_by'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '865a3439cc7c4dca8da8938506c61281'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'error_message'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '866f770f29c04f848de341d0926754b2'
                         deleted: false
@@ -1019,11 +1549,35 @@ declare global {
                     },
                     {
                         table: 'sys_documentation'
+                        id: '86943a0be0d1457bb51f13fd8858e44f'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'input_hash'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
                         id: '86faf1fc2d49443dae05280058c6fe9d'
                         key: {
                             name: 'x_snc_build_agranx_settings'
                             element: 'NULL'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '87561585a08b4890baa7da4860c77ae1'
+                        key: {
+                            application_file: 'a548e0502e794b19b52ee7b8e7b9e102'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_db_object'
+                        id: '8787db7b60954078badf5f8429fcd046'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
                         }
                     },
                     {
@@ -1051,10 +1605,35 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '8887929df6e14c478322af943672ecf5'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'request_key'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '88f023476c214362be23e90fee55ea0e'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'error_message'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact'
                         id: '894ba54622ba49a880c45d36165607f3'
                         key: {
                             name: 'x_snc_build_agranx_analytics.do - BYOUI Files'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '894cd0e50db34e998953f854506b3268'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'config_id'
                         }
                     },
                     {
@@ -1075,10 +1654,26 @@ declare global {
                     },
                     {
                         table: 'sn_glider_source_artifact_m2m'
+                        id: '8f0d0c9810d14d33927cdd80469fffe9'
+                        key: {
+                            application_file: '93789656d35c44bea465319f66c760d7'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
                         id: '9026d48790004653a58ba9485e99de20'
                         key: {
                             application_file: '5e7ad1b7fa824314926aaea324c58de3'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '9226c99cffb34e549f0e5b58aa5417b0'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'config_id'
                         }
                     },
                     {
@@ -1087,6 +1682,13 @@ declare global {
                         deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--e1704645.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: '93789656d35c44bea465319f66c760d7'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--24cacbda'
                         }
                     },
                     {
@@ -1118,6 +1720,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '986a2175608440e0a02d38e7439f7d1f'
+                        deleted: true
                         key: {
                             application_file: '07faacdd4b244dbb8c061f4e251437b5'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -1132,12 +1735,27 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_generative_ai_prompt_config'
+                        id: '9bd544523b441b50d0c6ab7e53e45a8b'
+                        key: {
+                            ai_config: '5bd5c0123b441b50d0c6ab7e53e45a7f'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '9c584eb39baa4c699973944f17bf762d'
                         deleted: true
                         key: {
                             application_file: '30539658fd1b492d872b23ddeb373fa0'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '9d1472b691e143879f0de3dd8398162d'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'requested_by'
                         }
                     },
                     {
@@ -1187,10 +1805,33 @@ declare global {
                         }
                     },
                     {
+                        table: 'ua_table_licensing_config'
+                        id: 'a288804cb1d24545ba26481ec6143d93'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: 'a548e0502e794b19b52ee7b8e7b9e102'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--eec65716'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'a7250d193ed444c48179bb71e825c78d'
                         key: {
                             name: 'x_snc_build_agranx/main.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'a7c35023d10445a8ac23c622a9620971'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'prompt_config_id'
+                            language: 'en'
                         }
                     },
                     {
@@ -1202,11 +1843,29 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: 'a7ea515e51ac412bbfa55633be52a717'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'result_json'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'a8d051f418c5406d83aed51aae0fe854'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/stateDiagram-v2-d93cdb3a'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'aa6798e08fa1476f93595985454451a1'
+                        deleted: true
+                        key: {
+                            application_file: '330f963d78fd4c38ab76328cf20da209'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
                     {
@@ -1218,10 +1877,27 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'ab15f41c4a7444ce8ba72f06b01133dc'
+                        key: {
+                            application_file: '4cd5fbb370294105a0176b947de36488'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sn_aia_tool'
                         id: 'ac2e4450f46b482ba4f8f255d0409310'
                         key: {
                             name: 'Get NAU Consumption'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'acc58875a920432fa728e1657ba0ded0'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'coaching_job'
+                            language: 'en'
                         }
                     },
                     {
@@ -1250,11 +1926,28 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'b031c406da494426bf9360c724b3b7a4'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'input_hash'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'b0a287aafa7c478ea4a5ed7ce469f504'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/stateDiagram-587899a1.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'b1bdcf5bb380463e9221b8f095987cc0'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'transaction_id'
+                            language: 'en'
                         }
                     },
                     {
@@ -1291,6 +1984,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'b97581359dc74b88a9ab2d27fa423004'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'result_json'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'b9b42a2c9d6f4013b325fe5a4ef4f661'
                         key: {
@@ -1304,6 +2005,14 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/clone'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'c070a2333a6242eb92fc9dd64b01f80e'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'model'
                         }
                     },
                     {
@@ -1336,6 +2045,13 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/stateDiagram-v2-d93cdb3a.js.map'
+                        }
+                    },
+                    {
+                        table: 'ua_table_licensing_config'
+                        id: 'c42957cc01744fc88760a02534cc5c9c'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
                         }
                     },
                     {
@@ -1372,6 +2088,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'c63f3f5b321f43de86c3f2da5e8aea6d'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'status'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'c90d413c5ab34b38911255c949549f72'
                         deleted: true
@@ -1389,12 +2113,42 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: 'cb8fc24c398748d58688fbd00398c64a'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'config_id'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'cbb27414d839402ba3d3fd4fee4a3a0f'
                         deleted: true
                         key: {
                             application_file: '67c0e1624f5b4b0894d548869453d70b'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'cc7169f82d2a4b42833590e6d9e69678'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'finished_at'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'cc7a31281b054caeac47102dbbce79a1'
+                        key: {
+                            sys_security_acl: 'eeae2af372dc452190e0f98d3245ce1b'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
                         }
                     },
                     {
@@ -1440,6 +2194,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'd070ae0f04f84b979e7cde7c7059ccab'
+                        deleted: true
                         key: {
                             application_file: '3fcfff2886b9424ca984c142906d975e'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -1458,6 +2213,58 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/gitGraphDiagram-72cf32ee'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'd494f856f26c406686664e004b836f27'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'error_message'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'd68366a0679c426c81f312b01381e239'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'result_json'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'd9d329269c7040bda495d58a4837bc72'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'error_message'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'daa1deb59e1349b9bf19e67d32082b25'
+                        key: {
+                            sys_security_acl: '351009cb0de94b2fbcf0684059129ad1'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'dde36510233342c99bd8b49a14edb780'
+                        key: {
+                            sys_security_acl: '79c745b1c030496abeb8cb5db724cf0e'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
                         }
                     },
                     {
@@ -1485,11 +2292,34 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'e20983efa2af4c4b86ea07fd8b819e69'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'NULL'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'e23c8c672213465abc3c96b5cdc32660'
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/xychartDiagram-e933f94c.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: 'e3cabce4af51484580b42de1439ccfb7'
+                        deleted: true
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-cytoscape--b57a642b.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_generative_ai_prompt_config'
+                        id: 'e3d544523b441b50d0c6ab7e53e45ade'
+                        key: {
+                            ai_config: '2fd544523b441b50d0c6ab7e53e45a9d'
                         }
                     },
                     {
@@ -1517,6 +2347,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'e4eef53686ef48009a004a5fbef30b14'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'status'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'e9675246e35c4628abfc5762b0b5fba8'
                         deleted: false
@@ -1541,6 +2379,23 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: 'ee6d6a77e0244e1ebc9d7792f156e7ec'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'source_json'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'ee9b2087a6d347569ee537303615602c'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'coaching_job'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'eecee598f1264be6a5450cf92e16f292'
                         deleted: false
@@ -1554,6 +2409,45 @@ declare global {
                         deleted: false
                         key: {
                             name: 'x_snc_build_agranx/createText-2e5e7dd3'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'f02526c59757425a9650d01ba09c567f'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'finished_at'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_security_acl_role'
+                        id: 'f050bf72fdf949589172147d0adbf0a6'
+                        key: {
+                            sys_security_acl: '79d6bf92274145f5a103d638dcb0bc05'
+                            sys_user_role: {
+                                id: '7918b071028f41fd9705ec58ff2d206b'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'f0e7896690be4b58ac7c8b9fee949484'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'conversation_owner'
+                            language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'f20efa11b2724b759c990244f1bdfd16'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'transaction_id'
                         }
                     },
                     {
@@ -1582,11 +2476,29 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'f60c6e2f0ce743ac922b370864f1ee1b'
+                        deleted: true
+                        key: {
+                            application_file: 'e3cabce4af51484580b42de1439ccfb7'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'f74f9e789c6b4f4399415f66bc9e42bc'
                         deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--5af3800d'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'f96f3522bcee43ccb8e90534a92ec58b'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_job'
+                            element: 'prepared_json'
+                            language: 'en'
                         }
                     },
                     {
@@ -1612,6 +2524,14 @@ declare global {
                             agent: '7511ea7edca64d079b22aa0f906cee4d'
                             tool: '7120e1868ca649898f325b4418b70a4a'
                             name: 'Get App Activity Heatmap'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'fc37ee6ed6c94fda9fdb9bcf91023858'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'model'
                         }
                     },
                     {
@@ -1671,6 +2591,15 @@ declare global {
                         key: {
                             application_file: 'f74f9e789c6b4f4399415f66bc9e42bc'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'fff95fbdf5e0400ab6229a729b9cb80b'
+                        key: {
+                            name: 'x_snc_build_agranx_coaching_skill_draft'
+                            element: 'model'
+                            language: 'en'
                         }
                     },
                 ]

@@ -5,6 +5,8 @@
     "module": "es2022",
     "target": "es2022",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "allowJs": true,
     "declaration": false,
     "sourceMap": false,

@@ -17,6 +17,7 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.13.3) with a React-base
 | **Applications** | Lists all applications touched by Build Agent, with conversation/checkpoint counts, global KPI cards, and search |
 | **App Detail** | Deep dive into a single application — full metadata composition with deep-links, related conversations, usage by author, implementation duration, and partner-hour savings calculator |
 | **Conversation Detail** | Full conversation thread with messages (user, assistant, thinking, tool calls), token usage, NAU breakdown, message search, Markdown/Mermaid rendering, and **export to printable HTML/PDF** |
+| **Conversation Coaching** | Within Conversation Detail: prepare a prompt/response preview, select GPT-5.6 Sol or Opus 5 when available through One Extend, and generate concise coaching with specific prompt rewrites and linked evidence |
 | **Consumption** | Monthly NAU consumption per user, with month navigation, search, and drill-down to individual user profiles |
 | **User Profile** | Individual user analytics — donut chart of top 5 apps, per-app breakdown table, daily activity timeline bar chart, and lifetime KPIs |
 | **Performance** | Agent-level KPIs — task telemetry, build-fix cycles, and tool error rates |
@@ -108,6 +109,8 @@ Each table is queried with `sys_scope=<appId>`; tables belonging to uninstalled 
 |-------|---------|-----------|
 | `x_snc_build_agranx_settings` | Per-user application preferences (key/value JSON) | `key`, `value`, `user` |
 | `x_snc_build_agranx_timeseries_cache` | Cached daily token/message aggregates per user/app | `period_date`, `token_count`, `message_count`, `user`, `application_id` |
+| `x_snc_build_agranx_coaching_job` | Saved asynchronous coaching requests and validated results | `requested_by`, `conversation_id`, `model`, `input_hash`, `status`, `prepared_json`, `result_json` |
+| `x_snc_build_agranx_coaching_skill_draft` | Private skill previews awaiting explicit installation | `requested_by`, `coaching_job`, `conversation_owner`, `source_hash`, `request_key`, `status`, `result_json` |
 
 ### Platform Records Created
 
@@ -147,6 +150,31 @@ Full transcript of a single conversation:
 - Message search, collapsible JSON tree for tool inputs, generic tool-result modal, image lightbox, file attachments
 - Tool calls annotated with category icons, duration and success/failure; `run_script` calls open the dedicated Run Script viewer
 - **Export / Print** button producing a printable HTML document (save as PDF from the browser)
+- **Conversation Coaching** panel for reviewing prompts and generating evidence-linked improvements
+
+### Conversation Coaching
+
+Open a conversation, expand **Conversation Coaching**, choose an available model, and prepare the conversation. Review the numbered prompts and response summaries, or inspect the complete analysis input, then generate coaching. Preparing the preview does not invoke a model. If the conversation changes before submission, refresh the preview before continuing.
+
+The model selector supports exactly **GPT-5.6 Sol** (`gpt-5.6-sol`) and **Opus 5** (`claude-opus-5`). Availability is resolved from the instance's active One Extend model catalog and published routes. An unavailable model is reported in the panel; the service does not silently substitute another model.
+
+Preparation and analysis work as follows:
+
+1. Read the conversation's messages in sequence order and group each user prompt with the following assistant messages, up to the next user prompt. Preserve repeated prompts and the complete turn order so later corrections remain evidence.
+2. Build each response summary from **extracted assistant text**, with source code, tool blocks, and structured tool envelopes removed. Add structural build/change activity counts and reported success/failure counts. These describe attempted activity and assistant claims; they do not independently verify generated artifacts.
+3. Exclude **all tool input/result payloads**, thinking messages, sub-agent streaming text, and attachment contents. Nested sub-agent tool calls still contribute structural activity and failure counts. Assistant- and user-reported failure excerpts remain available even when a long prompt or response summary is shortened, including explicit HTTP errors and undefined-symbol or exception reports. Quoted code and structured payloads are omitted from failure excerpts.
+4. Submit the previewed analysis input to the selected One Extend model. The transcript is explicitly treated as untrusted quoted data. The request asks for **up to three concise tips**, each identifying the original prompt, the specific wording or omission that went wrong, the agent's observed misunderstanding, supporting evidence turns, and a concrete suggested rewrite. Each card highlights **What went wrong** and **How the agent misunderstood it**, then shows the suggested prompt and **Why this helps**.
+5. Validate the returned JSON before displaying it: all referenced turns must exist; intent-mismatch tips need later evidence; error-related tips need observed failure evidence. The hard output limit is five tips and 16,000 total response characters. Overlong overview/issue/diagnosis/explanation text is shortened at word boundaries with a visible ellipsis and readability notice. Suggested prompt rewrites are never truncated; rewrites over 700 characters are rejected. Results are saved per requester, conversation, model, and input fingerprint, allowing completed results to be reused.
+
+Coaching prioritizes responses that later prompts correct and interactions that report errors. Its instructions distinguish ambiguous prompts from agent, tool, or environment failures. Each diagnosis must stay grounded in the conversation: it states when there is no demonstrated prompt mistake or proven misunderstanding, and does not infer the agent's hidden reasoning. Agent or environment failure cards use the neutral labels **Prompt assessment** and **What the response shows**. A later new requirement or changed preference alone is not grounds for blaming an earlier prompt; an assistant's earlier assumption is not treated as a confirmed user requirement. When the intended rule remains unclear, the rewrite asks for clarification. Tips link back to their prompt/evidence previews for review.
+
+Preparation keeps every user turn and structural failure count. Individual prompts default to a 6,000-character limit and assistant summaries to 1,800 characters; excerpts may be shortened further to keep the transcript within 60,000 characters. Every shortening is marked. The server also limits a conversation to 10,000 messages and 20 million raw message characters, and the final model input to 120,000 characters. Unreadable records, missing permissions, or a transcript that cannot fit without dropping turns prevent analysis instead of producing a partial result.
+
+The backend checks access to the conversation and every source message. The browser polls a saved job while One Extend runs the analysis. Provider failures, timeouts, and invalid output appear as retryable errors; raw provider errors and transcript content are not written to application error logs. Model-generated coaching remains advisory and does not edit the original conversation or execute suggested prompts.
+
+After coaching completes with supported tips, **Build skill** uses the same selected model to distill up to four concise instructions for how Build Agent should interpret this user's intent. The popup shows the exact skill, conversation owner, and availability before **Create and install skill** can be confirmed. Cancel installs nothing. Current explicit requests take precedence over the guide; one-time project requirements are not treated as permanent preferences.
+
+Installation creates an active native `sn_build_agent_user_instruction` with `type=skill` and `user` resolved from the conversation's owner. Build Agent loads these skills only for that user, across all application scopes. The owner or an administrator may install it, subject to native Build Agent permissions and active-skill limits. Administrators retain normal platform access. Preview generation never installs a skill; source/owner changes invalidate the preview, and repeated confirmation cannot create duplicates or overwrite an edited skill.
 
 ### Consumption
 
@@ -249,12 +277,20 @@ A GitHub contribution-style heatmap of daily message activity for a single appli
 # Install dependencies
 npm install
 
+# Check the client/server code and coaching normalization/response tests
+npm run typecheck
+npm test
+
 # Build the application
 npm run build
 
 # Deploy to your ServiceNow instance
 npm run deploy
 ```
+
+Configure the Now SDK connection for the target instance before deploying; keep instance credentials outside version control. Coaching ships with the same application build and install, including its UI, Scripted REST API, private job table, access rules, and One Extend integration. The two supported model providers must already be configured on the target instance.
+
+The SDK installs app-owned **BA Analytics Coaching - GPT-5.6 Sol** and **BA Analytics Coaching - Claude Opus 5** configurations, each with a non-default prompt-configuration link under One Extend's existing **Generic Prompt** capability. They use the Azure OpenAI Chat and Amazon Bedrock Chat definitions respectively, request low reasoning effort and at most 4,096 output tokens, and receive the prepared input through `{{prompt}}`. Each request explicitly supplies both configuration IDs; it does not change shared provider settings or the instance's default model selection. The server-only `BACoachingCallback` receives asynchronous completions, checks the request correlation and actual returned model identity, and validates the coaching before saving it. On a new instance, verify the model list in Conversation Coaching after installation and run a short conversation through preparation and analysis.
 
 ### Access the Dashboard
 
@@ -313,12 +349,14 @@ Totals are the sum of the three buckets. All figures are approximations displaye
 ## Development
 
 ```bash
-# Type-check server-side code
-npx tsc --project src/server/tsconfig.json --noEmit
+# Type-check client and server code
+npm run typecheck
 
-# Type-check client-side code
-npx tsc --project src/client/tsconfig.json --noEmit
+# Run shared preparation, evidence validation, and provider-response tests
+npm test
 ```
+
+Coaching normalization and output validation live in `src/server/coachingPreparation.js`; the browser panel is `src/client/components/ConversationCoaching.tsx`, the service implementation is `src/server/coaching.ts`, and its platform metadata is in `src/fluent/coaching/`. Tests use Node.js 22.13 or later for the built-in TypeScript stripping API used to isolate server helpers.
 
 Fluent metadata files (`.now.ts`) live under `src/fluent/` and are compiled into platform artifacts during the build step.
 
