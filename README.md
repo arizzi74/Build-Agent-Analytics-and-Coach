@@ -18,12 +18,13 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.13.3) with a React-base
 | **App Detail** | Deep dive into a single application — full metadata composition with deep-links, related conversations, usage by author, implementation duration, and partner-hour savings calculator |
 | **Conversation Detail** | Full conversation thread with messages (user, assistant, thinking, tool calls), token usage, NAU breakdown, message search, Markdown/Mermaid rendering, and **export to printable HTML/PDF** |
 | **Conversation Coaching** | Within Conversation Detail: prepare a prompt/response preview, select GPT-5.6 Sol or Opus 5 when available through One Extend, and generate concise coaching with specific prompt rewrites and linked evidence |
+| **Coach settings** | Personal automatic coaching after completed tools, a selectable model, and an optional floating Otto coach in Build Agent |
 | **Consumption** | Monthly NAU consumption per user, with month navigation, search, and drill-down to individual user profiles |
 | **User Profile** | Individual user analytics — donut chart of top 5 apps, per-app breakdown table, daily activity timeline bar chart, and lifetime KPIs |
 | **Performance** | Agent-level KPIs — task telemetry, build-fix cycles, and tool error rates |
 | **TimeSeries** | Per-application daily token consumption and message volume over time, with dual-axis SVG line chart and server-side caching |
 
-The top navigation exposes three tabs — **Applications**, **Consumption**, **Performance**. Three further views (App Detail, Conversation Detail, User Profile) are reached by drill-down and are deep-linkable via URL parameters. **TimeSeries** has no drill-down entry point today: it is only reachable via the deep-link `?view=timeseries`.
+The top navigation exposes **Applications**, **Consumption**, **Performance**, and **Coach settings**. Three further views (App Detail, Conversation Detail, User Profile) are reached by drill-down and are deep-linkable via URL parameters. **TimeSeries** has no drill-down entry point today: it is only reachable via the deep-link `?view=timeseries`.
 
 ### Additional Capabilities
 
@@ -111,6 +112,9 @@ Each table is queried with `sys_scope=<appId>`; tables belonging to uninstalled 
 | `x_snc_build_agranx_timeseries_cache` | Cached daily token/message aggregates per user/app | `period_date`, `token_count`, `message_count`, `user`, `application_id` |
 | `x_snc_build_agranx_coaching_job` | Saved asynchronous coaching requests and validated results | `requested_by`, `conversation_id`, `model`, `input_hash`, `status`, `prepared_json`, `result_json` |
 | `x_snc_build_agranx_coaching_skill_draft` | Private skill previews awaiting explicit installation | `requested_by`, `coaching_job`, `conversation_owner`, `source_hash`, `request_key`, `status`, `result_json` |
+| `x_snc_build_agranx_coach_preferences` | Opt-in settings for the current user | `user`, `automatic_enabled`, `active_enabled`, `model`, `epoch` |
+| `x_snc_build_agranx_coach_memory` | Bounded progressive memory per user and conversation | `user`, `conversation_id`, `memory_json`, `latest_tip_json`, `lease_id` |
+| `x_snc_build_agranx_coach_work` | Deduplicated completed-tool checkpoints and requested draft revisions | `user`, `conversation_id`, `message_id`, `sequence`, `status`, `result_json` |
 
 ### Platform Records Created
 
@@ -175,6 +179,18 @@ The backend checks access to the conversation and every source message. The brow
 After coaching completes with supported tips, **Build skill** uses the same selected model to distill up to four concise instructions for how Build Agent should interpret this user's intent. The popup shows the exact skill, conversation owner, and availability before **Create and install skill** can be confirmed. Cancel installs nothing. Current explicit requests take precedence over the guide; one-time project requirements are not treated as permanent preferences.
 
 Installation creates an active native `sn_build_agent_user_instruction` with `type=skill` and `user` resolved from the conversation's owner. Build Agent loads these skills only for that user, across all application scopes. The owner or an administrator may install it, subject to native Build Agent permissions and active-skill limits. Administrators retain normal platform access. Preview generation never installs a skill; source/owner changes invalidate the preview, and repeated confirmation cannot create duplicates or overwrite an edited skill.
+
+### Automatic and active coaching
+
+Open **Coach settings** (`?view=coach-settings`) and save your personal settings. Both switches default to off. **Automatic coaching** queues an asynchronous analysis after each new completed native tool message in a conversation you own. It uses your selected available model and consumes additional model usage for each checkpoint. Enabling it does not replay old tool completions.
+
+Each checkpoint includes the prompts and sanitized assistant summaries through that event, plus up to eight accumulated coaching behaviors for that same conversation. Raw tool inputs/results, private reasoning and attachment bodies are excluded. The model can return no tip; an actionable tip must have conversation evidence, and repeated tips are suppressed. Failed tools do not by themselves establish a prompt mistake. Checkpoints are deduplicated and serialized per conversation, with expiring leases and five-minute model timeouts. Changing settings invalidates pending results. Transient prepared inputs are cleared when work completes or fails.
+
+**Active coach** independently enables a floating, glowing Otto icon at the top right of the native Build Agent interface. With automatic coaching enabled, it shows a balloon when a new relevant tip arrives. Write an unsent draft, then click Otto to request a revision. This also works for the first prompt in a new chat, without creating a Build Agent conversation. The popup shows the original, proposal and reason. **Apply revision** changes only the draft; **Cancel** leaves it untouched. Editing the draft or switching conversations invalidates the proposal. Nothing is submitted automatically.
+
+Settings and APIs are bound to the signed-in user, even for administrators. Background work derives its owner from the native conversation and requires an active owner with `admin` or `sn_glider.admin`, current opt-in, and a non-internal conversation. Foreground requests also check native conversation/message ACLs. This service authorization matches the inspected MAIN native ACLs; installations with additional domain or custom access restrictions must extend that policy. Memory is private to its owner and conversation, with normal platform administrator access.
+
+The persistent overlay has two deployment parts: app-owned metadata (including `x_snc_build_agranx.active_coach` UI script) and a separate native Studio update set inserting one external script tag into the existing `sn_glider` UI page. `deployment/active_coach_studio_loader.py` prepares that exact, idempotent local change from a captured page record; it preserves the native scope and refuses unexpected page structure. Keep the original record for rollback and review the customization after Studio upgrades. The native extension registry runs extensions in workers and does not expose the composer DOM, so this loader is a Studio customization.
 
 ### Consumption
 

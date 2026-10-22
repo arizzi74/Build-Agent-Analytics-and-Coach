@@ -4,6 +4,8 @@ dist/
 node_modules/
 target/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 .jest_cache
 docs
 

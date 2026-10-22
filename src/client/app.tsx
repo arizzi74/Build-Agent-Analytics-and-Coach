@@ -8,6 +8,7 @@ import TimeSeriesView from "./components/TimeSeriesView.tsx";
 import UserConsumption from "./components/UserConsumption.tsx";
 import UserProfile from "./components/UserProfile.tsx";
 import LoadingModal from "./components/LoadingModal.tsx";
+import CoachAutomationSettings from "./components/CoachAutomationSettings.tsx";
 import { QueryTrackerContext, useQueryTrackerState } from "./services/queryTracker.ts";
 import { useTruncationWarnings, clearTruncationWarnings } from "./services/truncation.ts";
 import "./styles/base.css";
@@ -84,6 +85,8 @@ export default function App() {
 
   const renderView = () => {
     switch (view) {
+      case "coach-settings":
+        return <CoachAutomationSettings />;
       case "app-detail":
         return id ? (
           <AppDetail appId={id} onNavigate={navigateToView} />

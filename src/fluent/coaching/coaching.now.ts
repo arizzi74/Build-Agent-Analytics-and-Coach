@@ -2,6 +2,7 @@ import '@servicenow/sdk/global';
 import { Acl, CrossScopePrivilege, DateTimeColumn, Record, ReferenceColumn, RestApi, ScriptInclude, StringColumn, Table } from '@servicenow/sdk/core';
 import { coachingModels, coachingPrepare, coachingAnalyze, coachingJob } from '../../server/coaching';
 import { buildSkillPreview, buildSkillDraft, buildSkillInstall } from '../../server/buildSkill';
+import { automationSettings, automationSaveSettings, automationState, automationRevision, automationGetRevision } from '../../server/coachAutomation';
 import application from '../../../now.config.json';
 import packageMetadata from '../../../package.json';
 
@@ -102,6 +103,11 @@ RestApi({
   $id: Now.ID['coaching_api'], name: 'BA Analytics Conversation Coaching', serviceId: 'coaching', active: true,
   consumes: 'application/json', produces: 'application/json', enforceAcl: [coachingAccess],
   routes: [
+    {$id: Now.ID['coach_automation_settings_get'], name: 'Get personal coach settings', method: 'GET', path: '/automation/settings', script: automationSettings, authentication: true, authorization: true},
+    {$id: Now.ID['coach_automation_settings_save'], name: 'Save personal coach settings', method: 'PATCH', path: '/automation/settings', script: automationSaveSettings, authentication: true, authorization: true},
+    {$id: Now.ID['coach_automation_state'], name: 'Get private conversation coach state', method: 'GET', path: '/automation/state', script: automationState, authentication: true, authorization: true},
+    {$id: Now.ID['coach_automation_revision_create'], name: 'Request a prompt revision', method: 'POST', path: '/automation/revisions', script: automationRevision, authentication: true, authorization: true},
+    {$id: Now.ID['coach_automation_revision_get'], name: 'Get a prompt revision', method: 'GET', path: '/automation/revisions/{revisionId}', script: automationGetRevision, authentication: true, authorization: true},
     {$id: Now.ID['coaching_models_route'], name: 'Available coaching models', method: 'GET', path: '/models', script: coachingModels, authentication: true, authorization: true},
     {$id: Now.ID['coaching_prepare_route'], name: 'Prepare conversation', method: 'POST', path: '/prepare', script: coachingPrepare, authentication: true, authorization: true},
     {$id: Now.ID['coaching_analyze_route'], name: 'Analyze conversation', method: 'POST', path: '/analyze', script: coachingAnalyze, authentication: true, authorization: true},

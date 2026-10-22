@@ -9,6 +9,7 @@ const TABS = [
   { id: "applications", label: "Applications" },
   { id: "consumption", label: "Consumption" },
   { id: "performance", label: "Performance" },
+  { id: "coach-settings", label: "Coach settings" },
 ];
 
 export default function Navigation({ currentView, onNavigate }: NavigationProps) {

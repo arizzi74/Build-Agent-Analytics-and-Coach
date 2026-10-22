@@ -256,6 +256,8 @@ export function modelAnswer(output: any): any {
     if (value.status && !/^(success|completed)$/i.test(String(value.status))) throw new Error('provider_failure');
     if (Array.isArray(value.tips) && typeof value.summary === 'string') return value;
     if (Array.isArray(value.guidance) && typeof value.name === 'string') return value;
+    if (Array.isArray(value.memoryUpdates) && Object.prototype.hasOwnProperty.call(value, 'relevantTip')) return value;
+    if (typeof value.changed === 'boolean' && typeof value.revisedPrompt === 'string') return value;
     if (value.result !== undefined) value = value.result;
     else if (value.response !== undefined) value = value.response;
     else if (value.model_output !== undefined) value = value.model_output;

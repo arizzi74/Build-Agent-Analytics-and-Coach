@@ -1,0 +1,31 @@
+.ba-automation { max-width: 960px; margin: 0 auto; color: var(--ba-text); }
+.ba-automation__header { padding: var(--ba-space-6) 0; }
+.ba-automation__eyebrow { color: var(--ba-primary-dark); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.ba-automation__header h1 { margin: var(--ba-space-2) 0; font-size: 1.65rem; line-height: 1.2; }
+.ba-automation__header p { max-width: 710px; color: var(--ba-text-secondary); font-size: .875rem; line-height: 1.65; }
+.ba-automation__options { display: grid; gap: var(--ba-space-4); margin: 0; padding: 0; border: 0; }
+.ba-automation__option { display: flex; align-items: flex-start; gap: var(--ba-space-5); padding: var(--ba-space-5); border: 1px solid var(--ba-border); border-radius: var(--ba-radius-lg); background: var(--ba-white); cursor: pointer; box-shadow: var(--ba-shadow-1); }
+.ba-automation__option--on { border-color: var(--ba-border-accent); background: linear-gradient(110deg, var(--ba-primary-50), var(--ba-white) 75%); }
+.ba-automation__option-text { display: grid; gap: var(--ba-space-2); flex: 1; }
+.ba-automation__option-text strong { font-size: .9375rem; }
+.ba-automation__option-text span { color: var(--ba-text-secondary); font-size: .8125rem; line-height: 1.65; }
+.ba-automation__option-text small { color: var(--ba-text-secondary); font-size: .75rem; line-height: 1.5; }
+.ba-automation__option input { appearance: none; flex-shrink: 0; width: 44px; height: 26px; margin: 2px 0 0; border: 2px solid #8d9a9d; border-radius: 99px; background: #8d9a9d; cursor: pointer; transition: background .15s; }
+.ba-automation__option input::before { content: ""; display: block; height: 18px; width: 18px; margin: 2px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.ba-automation__option input:checked { background: var(--ba-primary); border-color: var(--ba-primary); }
+.ba-automation__option input:checked::before { transform: translateX(18px); }
+.ba-automation__model { padding: var(--ba-space-4) 0; }
+.ba-automation__model label { display: block; margin-bottom: var(--ba-space-2); font-size: .8125rem; font-weight: 700; }
+.ba-automation__model select { min-height: 40px; width: min(100%, 440px); padding: 8px 12px; border: 1px solid var(--ba-border); border-radius: var(--ba-radius-sm); background: var(--ba-white); color: var(--ba-text); font: inherit; }
+.ba-automation__model p { margin-top: var(--ba-space-2); font-size: .75rem; color: var(--ba-text-secondary); }
+.ba-automation__footer { display: flex; justify-content: space-between; align-items: center; gap: var(--ba-space-4); padding: var(--ba-space-4) 0; border-top: 1px solid var(--ba-border); }
+.ba-automation__footer p { font-size: .75rem; color: var(--ba-text-secondary); }
+.ba-automation__footer button { min-height: 40px; padding: 8px 20px; border: 1px solid var(--ba-primary); border-radius: var(--ba-radius-sm); background: var(--ba-primary); color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+.ba-automation button:disabled, .ba-automation input:disabled, .ba-automation select:disabled { opacity: .55; cursor: not-allowed; }
+.ba-automation :focus-visible { outline: 3px solid var(--ba-primary); outline-offset: 3px; }
+.ba-automation__error { margin: var(--ba-space-3) 0; padding: var(--ba-space-3); color: #991b1b !important; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--ba-radius-sm); overflow-wrap: anywhere; }
+.ba-automation__notice { min-height: 24px; color: var(--ba-primary-dark); font-size: .8125rem; }
+.ba-automation__status { color: var(--ba-text-secondary); padding: var(--ba-space-4) 0; }
+.ba-automation__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 600px) { .ba-automation__option { padding: var(--ba-space-4); gap: var(--ba-space-3); } .ba-automation__footer { align-items: flex-start; flex-direction: column; } .ba-automation__footer button { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .ba-automation__option input, .ba-automation__option input::before { transition: none; } }
