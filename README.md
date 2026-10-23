@@ -184,6 +184,10 @@ Installation creates an active native `sn_build_agent_user_instruction` with `ty
 
 Open **Coach settings** (`?view=coach-settings`) and save your personal settings. Both switches default to off. **Automatic coaching** analyzes a finished Build Agent turn once per user prompt in a conversation you own, including responses that use no tools. It uses your selected available model and consumes additional model usage for each analysis. Enabling it does not replay historical turns.
 
+![Personal coach settings with Automatic coach and Active coach enabled and GPT-5.6 Sol selected](assets/coach-settings.png)
+
+*Personal settings for automatic coaching, the active Otto coach, and the coaching model.*
+
 Native turn jobs establish when a turn starts and ends. Tool completions only help track persisted messages; they do not request coaching. Because the native terminal job update can precede the final saved response, the coach waits for a stable transcript before analysis. It binds that transcript to the exact user prompt and excludes later prompts. Ambiguous or unsettled turn boundaries prevent analysis rather than guessing.
 
 Each analysis includes the source prompt, sanitized assistant prose from the whole recorded response, all preceding turns, and up to eight accumulated coaching behaviors for that conversation. Long response excerpts favor the last assistant reply while retaining earlier progress and structural failure evidence. Raw tool inputs/results, private reasoning and attachment bodies are excluded. Failed or interrupted turns are explicitly marked as potentially incomplete; a recovered tool error does not establish an unresolved failure or a prompt mistake. Later corrective prompts can refine guidance about the original prompt.
@@ -191,6 +195,10 @@ Each analysis includes the source prompt, sanitized assistant prose from the who
 The model can return no tip; an actionable tip must have conversation evidence, and repeated tips are suppressed. Analyses are deduplicated per prompt and serialized per conversation, with expiring leases and five-minute model timeouts. A resumed attempt for an already analyzed prompt does not spend another automatic model call. Changing settings invalidates pending results. Transient prepared inputs are cleared when analysis completes or fails; lightweight native turn tracking retains only boundary metadata. Pending legacy per-tool analyses are ignored after this upgrade, while validated conversation memory with compatible turn references is retained.
 
 **Active coach** independently enables a glowing Otto icon immediately to the left of **Send** in the native Build Agent prompt composer, in both ServiceNow Studio (`/sn_glider_app/servicenow_studio.do`) and ServiceNow IDE (`/sn_glider_app/ide.do`). With automatic coaching enabled, it shows a balloon when a new relevant tip arrives. Write an unsent draft, then click Otto to request a revision. This also works for the first prompt in a new chat, without creating a Build Agent conversation. The popup shows the original, proposal and reason. **Apply revision** changes only the draft; **Cancel** leaves it untouched. Editing the draft or switching conversations invalidates the proposal. Nothing is submitted automatically. The popup's **Open conversation in BA Analytics** action opens the current saved conversation in a new tab. It is disabled for a new chat until the conversation is saved.
+
+![Otto coach beside Send in Build Agent, showing its guidance popup and Open conversation in BA Analytics button](assets/coach-otto-popup.png)
+
+*Otto in the native Build Agent composer, with its guidance popup open after a completed turn.*
 
 After you apply a revision, reviewing that exact draft again in the same conversation and turn shows **“You already accepted this revision”** without making another model request. This acknowledgement is remembered in the current browser tab, including reloads when the same chat is restored. An edited draft or a later conversation turn can receive a new review. Only a bounded set of fingerprints and acceptance timestamps is stored in the tab; the acknowledgement does not store prompt text.
 
