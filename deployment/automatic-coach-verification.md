@@ -56,3 +56,19 @@ The acknowledgement is bound to the native authenticated user, chat, ordered mes
 One existing UI-script record was deployed through native update set `b6e4c96aebcc1b90ebbaf05d9dc0cd51` (remote `3b1d2f49753acb22aff113edc466d79a`), with **zero preview problems, inserts, or deletions**. Strict read-back matched the reviewed source. The native IDE/Studio pages and the user's enabled settings were preserved. TEST was not changed.
 
 **12 live Playwright checks passed on the reported IDE workspace URL.** A real GPT-5.6 Sol revision (`gpt-5.6-sol-2026-07-09`) was applied to a disposable unsent draft. Both the Otto icon and the balloon's **Review my draft** button then showed the acceptance acknowledgement, with no additional revision POST, preview, draft mutation, or native message submission. The test verified hash-only storage and cleared its unsent draft afterward; enabled preferences remained unchanged. An initial network-counter assertion was corrected to observe Service Worker requests; the successful retry reused the same completed revision job, so the two test attempts produced only one model job. Screenshots were inspected for the brighter icon and the live acknowledgement.
+
+## Coach control beside Send
+
+On **23 October 2026**, the coach control was moved into the native prompt composer, immediately before Send. Both circles are 40 pixels wide and high, separated by the native eight-pixel gap. The control also stays beside Stop while Build Agent is working. Coaching balloons open above the control when space permits and remain within the viewport; the revision dialog retains its full-page placement.
+
+The control is a temporary native footer sibling. Its layout follows the composer through iframe resizing and native re-renders, and removing the coach restores Send's original inline margin and priority. The change preserves the light mint styling and accepted-revision acknowledgement.
+
+**147 Node tests and 64 mocked Chromium checks passed**: 33 existing behavior checks and 31 layout checks covering wide/narrow windows, iframe offsets, panel resizing, scrolling, Send re-rendering, Stop and disabled states, popup positioning, keyboard dismissal, and cleanup. JavaScript syntax and diff checks passed.
+
+MAIN received one existing UI-script update through native update set `dde1dda6eb405b90ebbaf05d9dc0cdf4` (remote `28a10cec9ac9a1fc624a037af681cfa6`). Preview reported zero problems, and the commit performed no inserts or deletions. Strict read-back verified the reviewed source. Native IDE/Studio page records and enabled user preferences remained unchanged; TEST was not modified.
+
+Live verification identified a native webview Window facade that omits `frameElement` and reports the outer document. Popup coordinates and resize/scroll listeners now use the exact document-to-iframe relationships found during DOM discovery. A maintained regression test covers the nested facade and verifies correct popup coordinates without a model request.
+
+The iframe correction was deployed through a separate one-record update set, `499415e63bcc9b50d0c6ab7e53e45add` (remote `f8049cb665e5c759b77c2ddfb27cad4b`), again with zero preview problems, inserts, or deletions and exact read-back. The 64 Chromium checks were rerun against the final code; 32 additional checks covered the nested native Window facade.
+
+**18 final live Playwright checks passed against the deployed script** in a fresh browser: IDE at 1500 and 640 pixels wide, an IDE reload, and Studio. All four placements had 40-pixel circles, an exact eight-pixel gap, and zero vertical center difference. Wide and narrow balloons opened above the composer and stayed inside the viewport. The test did not edit drafts, submit messages, or request model reviews; enabled user settings remained exactly unchanged. Final composer and popup screenshots were visually inspected.

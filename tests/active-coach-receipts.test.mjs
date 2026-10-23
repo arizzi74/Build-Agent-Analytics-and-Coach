@@ -14,6 +14,7 @@ async function fixture(options = {}) {
   const storage = options.storage || new Map();
   const intervals = new Map();
   const posts = [];
+  const scrollDocuments = [];
   let nextTimer = 0, digestGate = null, digestWaiting = false, denyStorage = !!options.denyStorage;
   let now = options.now || Date.now();
   class BrowserEvent {
@@ -21,17 +22,22 @@ async function fixture(options = {}) {
     preventDefault() { this.defaultPrevented = true; }
   }
   class Element {
-    constructor(name = 'DIV') { this.tagName = name; this.style = {}; this.isConnected = true; this.listeners = {}; this.attributes = {}; this.hidden = false; this.disabled = false; this.readOnly = false; this.textContent = ''; }
+    constructor(name = 'DIV') {
+      this.tagName = name; this.isConnected = true; this.listeners = {}; this.attributes = {}; this.hidden = false; this.disabled = false; this.readOnly = false; this.textContent = '';
+      const properties = new Map();
+      this.style = { setProperty(name, value, priority = '') { properties.set(name, { value, priority }); }, getPropertyValue(name) { return properties.get(name)?.value || ''; }, getPropertyPriority(name) { return properties.get(name)?.priority || ''; }, removeProperty(name) { properties.delete(name); } };
+    }
     addEventListener(type, handler) { (this.listeners[type] ||= []).push(handler); }
     dispatchEvent(event) { for (const handler of this.listeners[event.type] || []) handler(event); return !event.defaultPrevented; }
     getAttribute(name) { return this.attributes[name] || null; }
     setAttribute(name, value) { this.attributes[name] = value; }
-    getBoundingClientRect() { return { width: 300, height: 50 }; }
+    getBoundingClientRect() { return { left: 500, top: 600, width: 40, height: 40, right: 540, bottom: 640 }; }
     focus() {}
     setSelectionRange() {}
     showModal() { this.open = true; }
     close() { this.open = false; }
-    remove() { this.isConnected = false; if (document.host === this) document.host = null; }
+    remove() { this.isConnected = false; if (document.host === this) document.host = null; if (this.parentElement?.children) this.parentElement.children = this.parentElement.children.filter(child => child !== this); }
+    get nextElementSibling() { return this.parentElement?.children?.[this.parentElement.children.indexOf(this) + 1] || null; }
     get classList() { return { toggle() {} }; }
   }
   class Textarea extends Element {
@@ -44,37 +50,48 @@ async function fixture(options = {}) {
     messages: options.messages || [{ id: 'user-1', sender: 'user' }, { id: 'assistant-1', sender: 'assistant' }] };
   const native = { localName: 'chat-view', currentChatId: chat.id, chats: [chat], isLoading: false, userMessageDraft: input.value };
   input.addEventListener('input', () => { if (!options.rejectNativeEdit) native.userMessageDraft = input.value; });
-  const nativeRoot = { host: native, querySelectorAll: selector => selector === '*' || selector === 'textarea#input' ? [input] : [] };
+  const send = new Element('BUTTON'), sendAnchor = new Element('CUSTOM-TOOLTIP'), footer = new Element();
+  footer.matches = selector => selector === '.input-footer';
+  footer.children = [sendAnchor]; sendAnchor.parentElement = footer;
+  footer.insertBefore = (node, anchor) => { if (node.parentElement?.children) node.parentElement.children = node.parentElement.children.filter(child => child !== node); footer.children.splice(footer.children.indexOf(anchor), 0, node); node.parentElement = footer; node.isConnected = true; };
+  send.closest = selector => selector === 'custom-tooltip' ? sendAnchor : null;
+  const nativeRoot = { host: native, querySelectorAll: selector => selector === 'button.send-button,button.stop-button' ? [send] : selector === '*' ? [input, send, ...footer.children] : selector === 'textarea#input' ? [input] : [] };
+  sendAnchor.getRootNode = () => nativeRoot;
   native.shadowRoot = nativeRoot;
-  let shadow;
+  let shadow, controlShadow;
   const document = {
     host: null,
     querySelectorAll(selector) { return selector === '*' ? [native, ...(this.host ? [this.host] : [])] : []; },
     querySelector() { return null; },
+    addEventListener(type) { if (type === 'scroll') scrollDocuments.push(this); }, removeEventListener() {},
     createElement() {
+      const ownerDocument = this;
       const host = new Element();
-      host.ownerDocument = document;
+      host.ownerDocument = ownerDocument;
       host.attachShadow = () => {
         const elements = new Map();
-        shadow = { host, elements, addEventListener() {},
+        const attached = { host, elements, addEventListener() {},
           querySelector(selector) {
-            if (!elements.has(selector)) { const el = new Element(); el.ownerDocument = document; elements.set(selector, el); }
+            if (!elements.has(selector)) { const el = new Element(); el.ownerDocument = ownerDocument; if (['.balloon', '.notification', '.revision-error'].includes(selector)) el.hidden = true; elements.set(selector, el); }
             return elements.get(selector);
           },
           querySelectorAll() { return []; },
         };
-        host.shadowRoot = shadow;
-        return shadow;
+        if (host.id === 'ba-active-coach-control') controlShadow = attached; else shadow = attached;
+        host.shadowRoot = attached;
+        return attached;
       };
       return host;
     },
     body: { appendChild(host) { document.host = host; } },
   };
   input.ownerDocument = document;
+  send.ownerDocument = sendAnchor.ownerDocument = footer.ownerDocument = document;
   const window = {
     document, location: new URL('https://instance.example/sn_glider_app/ide.do?workspace=settings%3A%2Fusers%2F' + OWNER),
     sn_glider: { user: { userId: options.owner === undefined ? OWNER : options.owner } },
     TextEncoder, InputEvent: BrowserEvent, Event: BrowserEvent, HTMLTextAreaElement: Textarea,
+    innerWidth: 1500, innerHeight: 1000, addEventListener() {}, removeEventListener() {},
     getComputedStyle() { return { display: 'block', visibility: 'visible' }; },
     sessionStorage: {
       getItem(key) { if (denyStorage) throw Error('Storage denied'); return storage.get(key) || null; },
@@ -100,6 +117,25 @@ async function fixture(options = {}) {
     },
   };
   document.defaultView = window;
+  let nativeDocument = document, outerDocument = document;
+  if (options.nestedFrames) {
+    outerDocument = Object.create(document);
+    nativeDocument = Object.create(document);
+    outerDocument.defaultView = { ...window, document: outerDocument };
+    // ServiceNow's inner webview exposes a Window facade: DOM access works,
+    // but frameElement is absent and its document points at the outer webview.
+    nativeDocument.defaultView = { ...window, document: outerDocument, frameElement: null, parent: undefined };
+    const outerFrame = new Element('IFRAME'), innerFrame = new Element('IFRAME');
+    for (const [frame, owner, child, left, top] of [[outerFrame, document, outerDocument, 50, 20], [innerFrame, outerDocument, nativeDocument, 10, 30]]) {
+      frame.ownerDocument = owner; frame.contentDocument = child; frame.contentWindow = child.defaultView;
+      frame.offsetWidth = 1000; frame.offsetHeight = 800; frame.clientLeft = frame.clientTop = 0;
+      frame.getBoundingClientRect = () => ({ left, top, width: 1000, height: 800 });
+    }
+    document.querySelectorAll = selector => selector === '*' ? [outerFrame, ...(document.host ? [document.host] : [])] : [];
+    outerDocument.querySelectorAll = selector => selector === '*' ? [innerFrame] : [];
+    nativeDocument.querySelectorAll = selector => selector === '*' ? [native] : [];
+    input.ownerDocument = send.ownerDocument = sendAnchor.ownerDocument = footer.ownerDocument = nativeDocument;
+  }
   const api = { tip: null, unchanged: false };
   class Clock extends Date { static now() { return now; } }
   vm.runInNewContext(source, { window, AbortController, DOMException, Date: Clock }, { filename: 'activeCoach.js' });
@@ -107,13 +143,13 @@ async function fixture(options = {}) {
     for (let i = 0; i < 50; i++) { await new Promise(resolve => setImmediate(resolve)); if (predicate()) return; }
     throw Error('Overlay did not settle');
   }
-  await settle(() => !!document.host && !!shadow?.elements.get('.otto'));
-  const element = selector => shadow.querySelector(selector);
+  await settle(() => !!document.host && !!controlShadow?.elements.get('.otto'));
+  const element = selector => ['.otto', '.notification'].includes(selector) ? controlShadow.querySelector(selector) : shadow.querySelector(selector);
   const click = selector => element(selector).dispatchEvent(new BrowserEvent('click'));
   const setDraft = value => { input.value = value; input.dispatchEvent(new BrowserEvent('input')); };
   const review = async () => { click('.otto'); await settle(() => element('dialog').open && !element('.apply').disabled); };
   const apply = async () => { click('.apply'); await settle(() => element('.balloon h2').textContent === 'Revision applied'); };
-  return { window, document, native, chat, input, posts, storage, api, element, click, setDraft, review, apply, settle,
+  return { window, document, nativeDocument, outerDocument, scrollDocuments, native, chat, input, posts, storage, api, element, click, setDraft, review, apply, settle,
     receipts() { return JSON.parse(storage.get(RECEIPTS) || '[]'); },
     async poll() { for (const timer of [...intervals.values()]) if (timer.delay === 4000) await timer.callback(); await settle(); },
     pauseDigest() { let release; digestGate = new Promise(resolve => { release = resolve; }); return release; },
@@ -122,6 +158,20 @@ async function fixture(options = {}) {
     denyStorage() { denyStorage = true; },
   };
 }
+
+test('nested native webview Window facade opens guidance using exact DOM frame ancestry', async () => {
+  const f = await fixture({ nestedFrames: true });
+  f.setDraft(''); f.click('.otto'); await f.settle();
+  assert.equal(f.nativeDocument.defaultView.frameElement, null);
+  assert.notEqual(f.nativeDocument.defaultView.document, f.nativeDocument);
+  assert.equal(f.element('.balloon').hidden, false);
+  assert.equal(f.element('.balloon').style.left, '560px');
+  assert.equal(f.element('.balloon').style.top, '598px');
+  assert.ok(f.scrollDocuments.includes(f.nativeDocument));
+  assert.ok(f.scrollDocuments.includes(f.outerDocument));
+  assert.ok(f.scrollDocuments.includes(f.document));
+  assert.equal(f.posts.length, 0);
+});
 
 async function expectAcknowledgement(f) {
   const count = f.posts.length, draft = f.input.value;

@@ -55,6 +55,15 @@
     var current = null;
     var host = null;
     var shadow = null;
+    var composerHost = null;
+    var controlShadow = null;
+    var sendAnchor = null;
+    var originalSendMargin = null;
+    var layoutObserver = null;
+    var sizeObserver = null;
+    var layoutFrame = 0;
+    var layoutListeners = [];
+    var documentFrames = new WeakMap();
     var ui = {};
     var state = null;
     var busy = false;
@@ -84,10 +93,15 @@
         try { nodes = root.querySelectorAll("*"); } catch (_) { return; }
         for (var i = 0; i < nodes.length; i++) {
           var node = nodes[i];
-          if (node === host) continue;
+          if (node === host || node === composerHost) continue;
           if (node.shadowRoot) visit(node.shadowRoot);
           if (node.tagName === "IFRAME") {
-            try { if (node.contentDocument) visit(node.contentDocument); } catch (_) { /* Cross-origin frames cannot host this adapter. */ }
+            try {
+              if (node.contentDocument) {
+                documentFrames.set(node.contentDocument, node);
+                visit(node.contentDocument);
+              }
+            } catch (_) { /* Cross-origin frames cannot host this adapter. */ }
           }
         }
       }
@@ -251,27 +265,141 @@
       });
     }
 
-    function mount() {
-      if (host) return;
+    function composerPlacement(context) {
+      var root = context && context.nativeView && context.nativeView.shadowRoot;
+      if (!root) return null;
+      var buttons = Array.prototype.filter.call(root.querySelectorAll("button.send-button,button.stop-button"), visible);
+      if (buttons.length !== 1) return null;
+      var button = buttons[0];
+      var anchor = button.closest("custom-tooltip");
+      var row = anchor && anchor.parentElement;
+      if (!row || !row.matches(".input-footer") || anchor.getRootNode() !== root) return null;
+      return { root: root, button: button, anchor: anchor, row: row };
+    }
+
+    function restoreSendMargin() {
+      if (sendAnchor && originalSendMargin && sendAnchor.style.getPropertyValue("margin-left") === "0px" && sendAnchor.style.getPropertyPriority("margin-left") === "important") {
+        if (originalSendMargin.value) sendAnchor.style.setProperty("margin-left", originalSendMargin.value, originalSendMargin.priority);
+        else sendAnchor.style.removeProperty("margin-left");
+      }
+      sendAnchor = null;
+      originalSendMargin = null;
+    }
+
+    function disconnectLayout() {
+      if (layoutObserver) layoutObserver.disconnect();
+      if (sizeObserver) sizeObserver.disconnect();
+      layoutObserver = sizeObserver = null;
+      layoutListeners.forEach(function (entry) { entry.target.removeEventListener(entry.type, scheduleLayout, true); });
+      layoutListeners = [];
+      if (layoutFrame) global.cancelAnimationFrame(layoutFrame);
+      layoutFrame = 0;
+    }
+
+    function topRect(node) {
+      var rect = node.getBoundingClientRect();
+      var result = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      // Native webviews can expose a Window facade without frameElement/parent.
+      // Follow the exact document links discovered from the parent DOM instead.
+      var doc = node.ownerDocument;
+      while (doc !== global.document) {
+        var frame = documentFrames.get(doc);
+        if (!frame || !visible(frame)) return null;
+        var outer = frame.getBoundingClientRect();
+        var sx = frame.offsetWidth ? outer.width / frame.offsetWidth : 1;
+        var sy = frame.offsetHeight ? outer.height / frame.offsetHeight : 1;
+        result.left = outer.left + (frame.clientLeft + result.left) * sx;
+        result.top = outer.top + (frame.clientTop + result.top) * sy;
+        result.width *= sx; result.height *= sy;
+        doc = frame.ownerDocument;
+      }
+      result.right = result.left + result.width; result.bottom = result.top + result.height;
+      return result;
+    }
+
+    function positionBalloon() {
+      if (!ui.balloon || ui.balloon.hidden || !ui.otto) return;
+      var rect = topRect(ui.otto);
+      var width = global.innerWidth, height = global.innerHeight;
+      if (!rect || !visible(composerHost) || rect.right < 0 || rect.left > width || rect.bottom < 0 || rect.top > height) { ui.balloon.hidden = true; ui.otto.setAttribute("aria-expanded", "false"); return; }
+      var above = rect.top - 24 >= Math.min(180, height - rect.bottom - 24);
+      var available = Math.max(0, above ? rect.top - 24 : height - rect.bottom - 24);
+      ui.balloon.style.width = Math.max(0, Math.min(370, width - 24)) + "px";
+      ui.balloon.style.maxHeight = Math.min(available, height - 24) + "px";
+      var box = ui.balloon.getBoundingClientRect();
+      ui.balloon.style.left = Math.max(12, Math.min(rect.right - box.width, width - box.width - 12)) + "px";
+      ui.balloon.style.top = Math.max(12, Math.min(above ? rect.top - box.height - 12 : rect.bottom + 12, height - box.height - 12)) + "px";
+    }
+
+    function scheduleLayout() {
+      if (layoutFrame || !host || stopped) return;
+      layoutFrame = global.requestAnimationFrame(function () {
+        layoutFrame = 0;
+        var context = current;
+        if (!context || !visible(context.input)) context = findContext();
+        if (context && (!current || context.contextKey !== current.contextKey)) clearContext(context);
+        else if (context) current = context;
+        if (!context || !placeControl(context)) { unmount(); return; }
+        positionBalloon();
+      });
+    }
+
+    function placeControl(context) {
+      var placement = composerPlacement(context);
+      if (!placement || !composerHost) return false;
+      if (sendAnchor !== placement.anchor || !composerHost.isConnected || composerHost.nextElementSibling !== placement.anchor) {
+        disconnectLayout();
+        restoreSendMargin();
+        sendAnchor = placement.anchor;
+        originalSendMargin = { value: sendAnchor.style.getPropertyValue("margin-left"), priority: sendAnchor.style.getPropertyPriority("margin-left") };
+        sendAnchor.style.setProperty("margin-left", "0px", "important");
+        placement.row.insertBefore(composerHost, sendAnchor);
+        if (global.MutationObserver) { layoutObserver = new global.MutationObserver(scheduleLayout); layoutObserver.observe(placement.root, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] }); }
+        if (global.ResizeObserver) { sizeObserver = new global.ResizeObserver(scheduleLayout); [placement.row, placement.row.parentElement, sendAnchor, composerHost].forEach(function (node) { if (node) sizeObserver.observe(node); }); }
+        var doc = composerHost.ownerDocument;
+        while (doc) {
+          [{ target: doc.defaultView, type: "resize" }, { target: doc, type: "scroll" }].forEach(function (entry) { entry.target.addEventListener(entry.type, scheduleLayout, true); layoutListeners.push(entry); });
+          if (doc === global.document) break;
+          var frame = documentFrames.get(doc);
+          if (!frame) break;
+          if (sizeObserver) sizeObserver.observe(frame);
+          doc = frame.ownerDocument;
+        }
+      }
+      var outer = sendAnchor.getBoundingClientRect(), button = placement.button.getBoundingClientRect();
+      // custom-tooltip includes an inline baseline below its 40px native button.
+      composerHost.style.height = outer.height + "px";
+      composerHost.style.paddingTop = Math.max(0, button.top - outer.top) + "px";
+      return true;
+    }
+
+    function mount(context) {
+      if (host) { if (!placeControl(context)) unmount(); return; }
+      if (!composerPlacement(context)) return;
       host = global.document.createElement("div");
       host.id = "ba-active-coach";
-      host.style.cssText = "position:fixed;top:76px;right:24px;z-index:2147483000;display:block;";
+      host.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;z-index:2147483000;pointer-events:none;display:block;";
       shadow = host.attachShadow({ mode: "open" });
       shadow.innerHTML = '<style>' + styles() + '</style>' +
-        '<div class="coach"><button class="otto" type="button" aria-label="Otto coach: review my draft prompt" title="Otto coach · Review my draft" aria-expanded="false" aria-controls="coach-balloon"><img class="otto-native" src="/scripts/raw/sn_glider_app/extensions/build-agent/assets/icons/otto.svg" width="38" height="38" alt="" />' + otto() + '<span class="notification" hidden></span></button>' +
-        '<section id="coach-balloon" class="balloon" aria-label="Otto coaching suggestion" hidden><div class="heading"><span class="eyebrow">OTTO · YOUR PROMPT COACH</span><button class="close" type="button" aria-label="Dismiss coaching suggestion">×</button></div><h2></h2><p class="suggestion"></p><p class="why"></p><p class="meta"></p><div class="balloon-actions"><button class="revise secondary" type="button">Review my draft</button></div></section>' +
+        '<div class="coach"><section id="coach-balloon" class="balloon" aria-label="Otto coaching suggestion" hidden><div class="heading"><span class="eyebrow">OTTO · YOUR PROMPT COACH</span><button class="close" type="button" aria-label="Dismiss coaching suggestion">×</button></div><h2></h2><p class="suggestion"></p><p class="why"></p><p class="meta"></p><div class="balloon-actions"><button class="revise secondary" type="button">Review my draft</button></div></section>' +
         '<span class="sr-only live" role="status" aria-live="polite" aria-atomic="true"></span>' +
         '<dialog class="revision-dialog" aria-labelledby="coach-revision-title"><div class="dialog-header"><span class="eyebrow">OTTO · PROMPT REVISION</span><h2 id="coach-revision-title">Make your intent clearer</h2><p class="dialog-status" role="status"></p></div><div class="dialog-body"><div class="revision-grid"><section><h3>Your draft</h3><pre class="original"></pre></section><section><h3>Suggested revision</h3><pre class="revised"></pre></section></div><p class="revision-why"></p><p class="revision-error" role="alert" hidden></p><p class="confirmation-note">Apply replaces your draft. You review and send it yourself.</p></div><div class="dialog-actions"><button class="cancel secondary" type="button">Cancel</button><button class="apply primary" type="button" disabled>Apply revision</button></div></dialog></div>';
       global.document.body.appendChild(host);
-      ["otto", "balloon", "suggestion", "why", "meta", "live", "original", "revised", "apply", "cancel"].forEach(function (key) { ui[key] = shadow.querySelector("." + key); });
+      composerHost = context.input.ownerDocument.createElement("div");
+      composerHost.id = "ba-active-coach-control";
+      composerHost.style.cssText = "display:flex;position:relative;flex:0 0 40px;width:40px;box-sizing:border-box;align-items:flex-start;justify-content:center;margin-left:auto;";
+      controlShadow = composerHost.attachShadow({ mode: "open" });
+      controlShadow.innerHTML = '<style>' + styles() + '</style><button class="otto" type="button" aria-label="Otto coach: review my draft prompt" title="Otto coach · Review my draft" aria-expanded="false"><img class="otto-native" src="/scripts/raw/sn_glider_app/extensions/build-agent/assets/icons/otto.svg" width="26" height="26" alt="" />' + otto() + '<span class="notification" hidden></span></button>';
+      ["balloon", "suggestion", "why", "meta", "live", "original", "revised", "apply", "cancel"].forEach(function (key) { ui[key] = shadow.querySelector("." + key); });
+      ui.otto = controlShadow.querySelector(".otto");
       ui.title = shadow.querySelector(".balloon h2");
-      ui.notification = shadow.querySelector(".notification");
+      ui.notification = controlShadow.querySelector(".notification");
       ui.dialog = shadow.querySelector("dialog");
       ui.dialogStatus = shadow.querySelector(".dialog-status");
       ui.revisionWhy = shadow.querySelector(".revision-why");
       ui.revisionError = shadow.querySelector(".revision-error");
-      var nativeIcon = shadow.querySelector(".otto-native");
-      var fallbackIcon = shadow.querySelector(".otto svg");
+      var nativeIcon = controlShadow.querySelector(".otto-native");
+      var fallbackIcon = controlShadow.querySelector(".otto svg");
       fallbackIcon.style.display = "none";
       nativeIcon.addEventListener("error", function () { nativeIcon.hidden = true; fallbackIcon.style.display = "block"; });
       ui.otto.addEventListener("click", onIconClick);
@@ -281,14 +409,21 @@
       ui.apply.addEventListener("click", applyRevision);
       ui.dialog.addEventListener("cancel", function (event) { event.preventDefault(); closeRevision(); });
       ui.dialog.addEventListener("keydown", trapDialogFocus);
-      shadow.addEventListener("keydown", function (event) {
+      function escapeBalloon(event) {
         if (event.key === "Escape" && !ui.dialog.open && !ui.balloon.hidden) { event.preventDefault(); dismissTip(); ui.otto.focus(); }
-      });
+      }
+      shadow.addEventListener("keydown", escapeBalloon);
+      controlShadow.addEventListener("keydown", escapeBalloon);
+      placeControl(context);
       staleTimer = global.setInterval(checkStaleRevision, 400);
     }
 
     function unmount() {
       closeRevision(false);
+      disconnectLayout();
+      restoreSendMargin();
+      if (composerHost) composerHost.remove();
+      composerHost = controlShadow = null;
       if (staleTimer) global.clearInterval(staleTimer);
       staleTimer = null;
       if (host) host.remove();
@@ -319,6 +454,7 @@
       ui.meta.hidden = !meta;
       ui.balloon.hidden = false;
       ui.otto.setAttribute("aria-expanded", "true");
+      positionBalloon();
     }
 
     function showTip(tip, announce) {
@@ -539,7 +675,7 @@
           return;
         }
         if (!current || next.contextKey !== current.contextKey) clearContext(next);
-        else current.input = next.input;
+        else current = next;
         if (!settings || Date.now() - settingsAt > 20000) {
           var loaded = await request("/automation/settings");
           if (stopped) return;
@@ -550,7 +686,8 @@
         if (!settings.activeCoachEnabled) { if (host) unmount(); return; }
         var actual = findContext();
         if (!actual || !current || actual.contextKey !== current.contextKey) { clearContext(actual); if (host) unmount(); return; }
-        mount();
+        mount(actual);
+        if (!host) return;
         if (!current || !current.conversationId || !settings.automaticEnabled) return;
         var id = current.conversationId;
         var generation = contextGeneration;
@@ -591,11 +728,11 @@
   }
 
   function otto() {
-    return '<svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true" fill="none"><path d="M15 11V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v3" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="7" y="11" width="34" height="28" rx="12" fill="#e9fff3" stroke="currentColor" stroke-width="2.7"/><path d="M4 22v7m40-7v7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="14" y="20" width="6" height="7" rx="3" fill="currentColor"/><rect x="28" y="20" width="6" height="7" rx="3" fill="currentColor"/><path d="M19 32c3 2 7 2 10 0" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
+    return '<svg viewBox="0 0 48 48" width="26" height="26" aria-hidden="true" fill="none"><path d="M15 11V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v3" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="7" y="11" width="34" height="28" rx="12" fill="#e9fff3" stroke="currentColor" stroke-width="2.7"/><path d="M4 22v7m40-7v7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="14" y="20" width="6" height="7" rx="3" fill="currentColor"/><rect x="28" y="20" width="6" height="7" rx="3" fill="currentColor"/><path d="M19 32c3 2 7 2 10 0" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
   }
 
   function styles() {
-    return ':host{all:initial;color-scheme:light;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#183c36}*{box-sizing:border-box}button{font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #20a294;outline-offset:4px}button:disabled{opacity:.5;cursor:not-allowed}[hidden]{display:none!important}.coach{position:relative;display:flex;justify-content:flex-end}.otto{display:flex;align-items:center;justify-content:center;position:relative;width:58px;height:58px;border:1px solid #69c99c;border-radius:50%;color:#154e42;background:#f0fff6;box-shadow:0 0 0 5px #80edb626,0 0 26px #5de2ab73,0 4px 14px #113c3538;animation:otto-glow 3s ease-in-out infinite}.otto-native{filter:brightness(0) saturate(100%) invert(24%) sepia(30%) saturate(884%) hue-rotate(113deg) brightness(91%) contrast(94%)}.otto:hover{background:#dfffeb;transform:translateY(-1px)}.otto.thinking{animation:otto-glow 1.2s ease-in-out infinite}.notification{position:absolute;right:1px;top:2px;width:13px;height:13px;border:2px solid white;background:#f5bc45;border-radius:50%}.balloon{position:absolute;right:0;top:74px;width:min(370px,calc(100vw - 32px));padding:20px;border:1px solid #c8e4dc;border-radius:18px;background:#fff;box-shadow:0 12px 40px #122f3730}.balloon:before{content:"";position:absolute;right:21px;top:-8px;width:14px;height:14px;background:white;border-left:1px solid #c8e4dc;border-top:1px solid #c8e4dc;transform:rotate(45deg)}.heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.09em;color:#3a7160}.close{width:27px;height:27px;padding:0;border:0;border-radius:50%;background:#f0f6f3;color:#426b60;font-size:21px;line-height:1}.balloon h2{margin:12px 0 9px;font-size:18px;font-weight:750;line-height:1.3}.balloon p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.suggestion{font-size:13px;line-height:1.6}.why{font-size:12px;color:#57716a}.meta{font-size:10px;color:#70867e}.balloon-actions{margin-top:15px}.primary,.secondary{padding:8px 13px;border-radius:7px;min-height:36px;font-size:12px;font-weight:700}.primary{background:#176b52;border:1px solid #176b52;color:white}.primary:hover:not(:disabled){background:#10513e}.secondary{border:1px solid #cadbd4;background:#fff;color:#285f4e}.secondary:hover{background:#eff7f2}.revision-dialog{width:min(900px,calc(100vw - 40px));max-height:calc(100dvh - 48px);margin:auto;padding:0;overflow:auto;border:1px solid #c8e4dc;border-radius:18px;background:#fff;color:#183c36;box-shadow:0 24px 80px #102d3655;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.revision-dialog::backdrop{background:#0e262d88}.dialog-header{padding:24px 26px 14px;background:linear-gradient(120deg,#eef9f2,#fff)}.dialog-header h2{margin:9px 0;font-size:24px;letter-spacing:-.025em}.dialog-status{margin:0;color:#62756f;font-size:12px}.dialog-body{padding:12px 26px 20px}.revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.revision-grid section{min-width:0}.revision-grid h3{margin:0 0 8px;font-size:12px}.revision-grid pre{max-height:350px;overflow:auto;min-height:100px;margin:0;padding:15px;border:1px solid #dde6e1;border-radius:9px;font:inherit;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8faf9}.revision-grid .revised{background:#f0f9f3;border-color:#bedccc}.revision-why{margin:17px 0 0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:#416b59}.confirmation-note{margin:14px 0 0;color:#6a7c74;font-size:11px}.revision-error{padding:11px;border:1px solid #f4c5ba;border-radius:7px;background:#fff2ee;color:#9b352c;font-size:12px}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;padding:16px 26px;border-top:1px solid #e0e8e4;background:#fff}.sr-only{position:absolute;overflow:hidden;width:1px;height:1px;margin:-1px;padding:0;clip:rect(0,0,0,0);white-space:nowrap;border:0}@keyframes otto-glow{0%,100%{box-shadow:0 0 0 5px #80edb626,0 0 20px #5de2ab60,0 4px 14px #113c3538}50%{box-shadow:0 0 0 7px #80edb61a,0 0 30px #5de2ab90,0 4px 14px #113c3538}}@media(max-width:600px){.revision-grid{grid-template-columns:1fr}.dialog-header,.dialog-body{padding-left:18px;padding-right:18px}.dialog-header h2{font-size:21px}.revision-grid pre{max-height:210px}.dialog-actions{padding:14px 18px}.otto{width:50px;height:50px}.balloon{top:66px}}@media(prefers-reduced-motion:reduce){.otto,.otto.thinking{animation:none}.otto:hover{transform:none}}';
+    return ':host{all:initial;color-scheme:light;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#183c36}*{box-sizing:border-box}button{font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #20a294;outline-offset:4px}button:disabled{opacity:.5;cursor:not-allowed}[hidden]{display:none!important}.coach{position:relative;pointer-events:none}.otto{display:flex;align-items:center;justify-content:center;position:relative;width:40px;height:40px;padding:0;border:1px solid #69c99c;border-radius:50%;color:#154e42;background:#f0fff6;box-shadow:0 0 0 5px #80edb626,0 0 26px #5de2ab73,0 4px 14px #113c3538;animation:otto-glow 3s ease-in-out infinite}.otto-native{filter:brightness(0) saturate(100%) invert(24%) sepia(30%) saturate(884%) hue-rotate(113deg) brightness(91%) contrast(94%)}.otto:hover{background:#dfffeb}.otto.thinking{animation:otto-glow 1.2s ease-in-out infinite}.notification{position:absolute;right:1px;top:2px;width:13px;height:13px;border:2px solid white;background:#f5bc45;border-radius:50%}.balloon{position:fixed;pointer-events:auto;overflow:auto;width:min(370px,calc(100vw - 24px));padding:20px;border:1px solid #c8e4dc;border-radius:18px;background:#fff;box-shadow:0 12px 40px #122f3730}.heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.09em;color:#3a7160}.close{width:27px;height:27px;padding:0;border:0;border-radius:50%;background:#f0f6f3;color:#426b60;font-size:21px;line-height:1}.balloon h2{margin:12px 0 9px;font-size:18px;font-weight:750;line-height:1.3}.balloon p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.suggestion{font-size:13px;line-height:1.6}.why{font-size:12px;color:#57716a}.meta{font-size:10px;color:#70867e}.balloon-actions{margin-top:15px}.primary,.secondary{padding:8px 13px;border-radius:7px;min-height:36px;font-size:12px;font-weight:700}.primary{background:#176b52;border:1px solid #176b52;color:white}.primary:hover:not(:disabled){background:#10513e}.secondary{border:1px solid #cadbd4;background:#fff;color:#285f4e}.secondary:hover{background:#eff7f2}.revision-dialog{pointer-events:auto;width:min(900px,calc(100vw - 40px));max-height:calc(100dvh - 48px);margin:auto;padding:0;overflow:auto;border:1px solid #c8e4dc;border-radius:18px;background:#fff;color:#183c36;box-shadow:0 24px 80px #102d3655;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.revision-dialog::backdrop{background:#0e262d88}.dialog-header{padding:24px 26px 14px;background:linear-gradient(120deg,#eef9f2,#fff)}.dialog-header h2{margin:9px 0;font-size:24px;letter-spacing:-.025em}.dialog-status{margin:0;color:#62756f;font-size:12px}.dialog-body{padding:12px 26px 20px}.revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.revision-grid section{min-width:0}.revision-grid h3{margin:0 0 8px;font-size:12px}.revision-grid pre{max-height:350px;overflow:auto;min-height:100px;margin:0;padding:15px;border:1px solid #dde6e1;border-radius:9px;font:inherit;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8faf9}.revision-grid .revised{background:#f0f9f3;border-color:#bedccc}.revision-why{margin:17px 0 0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:#416b59}.confirmation-note{margin:14px 0 0;color:#6a7c74;font-size:11px}.revision-error{padding:11px;border:1px solid #f4c5ba;border-radius:7px;background:#fff2ee;color:#9b352c;font-size:12px}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;padding:16px 26px;border-top:1px solid #e0e8e4;background:#fff}.sr-only{position:absolute;overflow:hidden;width:1px;height:1px;margin:-1px;padding:0;clip:rect(0,0,0,0);white-space:nowrap;border:0}@keyframes otto-glow{0%,100%{box-shadow:0 0 0 5px #80edb626,0 0 20px #5de2ab60,0 4px 14px #113c3538}50%{box-shadow:0 0 0 7px #80edb61a,0 0 30px #5de2ab90,0 4px 14px #113c3538}}@media(max-width:600px){.revision-grid{grid-template-columns:1fr}.dialog-header,.dialog-body{padding-left:18px;padding-right:18px}.dialog-header h2{font-size:21px}.revision-grid pre{max-height:210px}.dialog-actions{padding:14px 18px}}@media(prefers-reduced-motion:reduce){.otto,.otto.thinking{animation:none}.otto:hover{transform:none}}';
   }
 
   global.BAActiveCoach = { version: "1.0.0", start: start, stop: function () { if (instance) instance.stop(); instance = null; } };
