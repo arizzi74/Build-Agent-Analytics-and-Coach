@@ -44,3 +44,15 @@ On **22 October 2026**, two separate one-record native update sets corrected MAI
 **136 Node tests, 6 Python loader tests, and 24 mocked Playwright checks passed.** The added route regression tests fail against the previous overlay and pass with the correction. Live Playwright verification on the reported IDE workspace URL confirmed automatic script loading, the glowing upper-right icon, the guidance balloon, and visibility after reload. No prompt was submitted or model request made for this compatibility test. The user's current automatic and active coaching settings were both enabled and were preserved.
 
 An IDE tab opened before this correction must be reloaded to load the new page integration.
+
+## Brighter Otto and accepted-revision acknowledgement
+
+On **23 October 2026**, MAIN received a brighter Otto icon with a pale mint background, dark teal symbol, and the existing green glow. After a successful **Apply revision**, another review of that exact draft in the same chat and turn now displays **“You already accepted this revision”** and **“No new review was run.”** It does not open another preview or request another model response.
+
+The acknowledgement is bound to the native authenticated user, chat, ordered message history, and exact accepted text. The browser tab retains at most 32 SHA-256 fingerprints and timestamps, expiring after seven days; no prompt text or identifiers are stored in the receipt. Same-tab reloads retain recognition when the native editor restores the same chat. Missing identity or stable chat metadata cannot establish acceptance. Cancel, rejected insertion, and unchanged model responses do not count as acceptance. Edited drafts and later turns remain eligible for review.
+
+**146 Node tests and 33 mocked Chromium checks passed**, including accepted-draft recognition, cancellation, failed edits, user/chat/turn isolation, same-tab reload, storage denial, bounded receipts, asynchronous context changes, and prevention of polling-tip replacement. JavaScript syntax and diff checks also passed.
+
+One existing UI-script record was deployed through native update set `b6e4c96aebcc1b90ebbaf05d9dc0cd51` (remote `3b1d2f49753acb22aff113edc466d79a`), with **zero preview problems, inserts, or deletions**. Strict read-back matched the reviewed source. The native IDE/Studio pages and the user's enabled settings were preserved. TEST was not changed.
+
+**12 live Playwright checks passed on the reported IDE workspace URL.** A real GPT-5.6 Sol revision (`gpt-5.6-sol-2026-07-09`) was applied to a disposable unsent draft. Both the Otto icon and the balloon's **Review my draft** button then showed the acceptance acknowledgement, with no additional revision POST, preview, draft mutation, or native message submission. The test verified hash-only storage and cleared its unsent draft afterward; enabled preferences remained unchanged. An initial network-counter assertion was corrected to observe Service Worker requests; the successful retry reused the same completed revision job, so the two test attempts produced only one model job. Screenshots were inspected for the brighter icon and the live acknowledgement.
