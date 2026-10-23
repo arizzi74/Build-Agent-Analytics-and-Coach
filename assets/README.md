@@ -2,11 +2,12 @@
 
 ## Coaching screenshots
 
-Screenshots captured from the deployed application during live verification and referenced in the root README's **Automatic and active coaching** section:
+Screenshots captured from the deployed application during live verification and referenced in the root README's **Conversation Coaching** and **Automatic and active coaching** sections:
 
 | Screenshot | Filename |
 |------------|----------|
-| Personal automatic and active coach settings, with model selection | `coach-settings.png` |
+| Conversation coaching with prompt diagnoses, suggested rewrites, and linked evidence | `conversation-coaching.png` |
+| Prompt coaching comparing an unsent draft with a model-proposed revision before confirmation | `prompt-coaching.png` |
 | Otto beside Send in Build Agent, with the guidance popup open | `coach-otto-popup.png` |
 
 ## AIUX widget screenshots
