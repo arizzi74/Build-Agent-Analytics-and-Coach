@@ -499,7 +499,7 @@
       if (context && readDraft(context.input).trim()) { void requestRevision(); return; }
       if (!ui.balloon.hidden) { dismissTip(); return; }
       if (state && state.latestTip) { showTip(state.latestTip, false); return; }
-      showBalloon("Let’s make your next prompt clearer", "Write a draft in Build Agent, then click Otto to review a suggested revision.", "", settings && settings.automaticEnabled ? "Your coach also learns from completed tools in this conversation." : "Automatic coaching is off. Draft reviews are still available.");
+      showBalloon("Let’s make your next prompt clearer", "Write a draft in Build Agent, then click Otto to review a suggested revision.", "", settings && settings.automaticEnabled ? "Your coach also learns from finished turns in this conversation." : "Automatic coaching is off. Draft reviews are still available.");
     }
 
     function trapDialogFocus(event) {

@@ -20,6 +20,7 @@ const MEMORY = 'x_snc_build_agranx_coach_memory';
 const WORK = 'x_snc_build_agranx_coach_work';
 const CONVERSATION = 'sn_build_agent_conversation';
 const MESSAGE = 'sn_build_agent_message';
+const JOB = 'sn_build_agent_job';
 const CAPABILITY = '0c90ca79533121106b38ddeeff7b12d7';
 const ID = { user: '1'.repeat(32), other: '2'.repeat(32), conversation: '3'.repeat(32), tool: '4'.repeat(32), config: '5'.repeat(32), prompt: '6'.repeat(32), preferences: '7'.repeat(32), tool2: '8'.repeat(32) };
 const clockStart = Date.UTC(2026, 9, 22, 20, 0, 0);
@@ -40,10 +41,10 @@ function fixture(overrides = {}) {
     { sys_id: 'c'.repeat(32), conversation: ID.conversation, sequence: '3', content: JSON.stringify({ sender: 'user', text: 'Include every region; I did not ask for the current region only.' }) },
     { sys_id: ID.tool, conversation: ID.conversation, sequence: '4', content: JSON.stringify({ sender: 'assistant-tool', complete: true, success: false, toolUseId: 'native-tool-1', toolName: 'write_summary', toolInput: { secret: 'RAW_PRIVATE_TOOL_INPUT' }, result: 'RAW_PRIVATE_TOOL_RESULT' }) },
   ];
-  rows.forEach(row => { row.sys_created_on = now(); });
+  rows.forEach(row => { row.sys_created_on = now(); row.sys_updated_on = now(); row.active = 'true'; row.sub_agent_id = ''; });
   const tables = {
     [PREFS]: options.seedPreferences ? [prefs] : [], [MEMORY]: [], [WORK]: [],
-    [CONVERSATION]: [conversation], [MESSAGE]: rows,
+    [CONVERSATION]: [conversation], [MESSAGE]: rows, [JOB]: [],
     sys_user: [user, { sys_id: ID.other, active: 'true', user_name: 'other' }],
     sys_user_has_role: options.role ? [{ sys_id: 'e'.repeat(32), user: ID.user, role: 'd'.repeat(32), 'role.name': options.role, inherited: 'true' }] : [],
     sys_user_role: options.role ? [{ sys_id: 'd'.repeat(32), name: options.role }] : [],
@@ -175,18 +176,37 @@ function fixture(overrides = {}) {
     modelAnswer: parserContext.unwrapModel,
     OneExtendUtil: { execute(request) { writes.inference.push(asJson(request)); if (options.onInference) options.onInference(request); if (options.providerThrows) throw new Error('SECRET_PROVIDER_DIAGNOSTIC'); return options.submission || { status: 'success' }; } },
   });
-  vm.runInContext(standalone + '\nthis.api = {automationSettings,automationSaveSettings,automationToolCompleted,automationProcess,automationEvent,automationCallback,automationState,automationRevision,automationGetRevision};', context);
+  vm.runInContext(standalone + '\nthis.api = {automationSettings,automationSaveSettings,automationToolCompleted,automationTurnChanged,automationMessageChanged,automationProcess,automationEvent,automationCallback,automationState,automationRevision,automationGetRevision};', context);
   function call(method, body = {}, params = {}, query = {}) {
     const response = { status: 200, body: undefined, setStatus(status) { this.status = status; }, setBody(body) { this.body = body; } };
     context.api[method]({ body: { data: body }, pathParams: params, queryParams: query }, response);
     return { status: response.status, body: asJson(response.body) };
   }
-  function enqueue(id = ID.tool, previous = null) { context.api.automationToolCompleted(record(MESSAGE, id), previous); return tables[WORK].find(row => row.message_id === id); }
-  function process(id) { context.api.automationProcess(id || tables[WORK][0]?.sys_id); }
-  function callback({ jobId = tables[WORK][0]?.sys_id, model = 'gpt-5.6-sol', config = ID.config, prompt = ID.prompt, outcome = 'completed', featureStatus = 'success', envelopeStatus = 'success', answer = coachingAnswer() } = {}) {
+  function nativeJob(overrides = {}) {
+    const row = { sys_id: (++serial).toString(16).padStart(32, '0'), job_id: 'native-' + serial, conversation: ID.conversation, pool: 'interactive', internal: 'false', status: 'queued', attempt_number: '1', resumed_from_job: '', sys_created_on: now(), sys_updated_on: now(), ...overrides };
+    tables[JOB].push(row); options.operation = 'insert'; context.api.automationTurnChanged(record(JOB, row.sys_id), null); return row;
+  }
+  function transition(row, status) {
+    const previous = record(JOB, row.sys_id); row.status = status; row.sys_updated_on = now(); options.operation = 'update'; context.api.automationTurnChanged(record(JOB, row.sys_id), previous); options.operation = 'insert';
+  }
+  function addMessage(sender, text = '', extra = {}) {
+    const seq = Math.max(0, ...tables[MESSAGE].map(r => Number(r.sequence))) + 1;
+    const row = { sys_id: (++serial).toString(16).padStart(32, '0'), conversation: ID.conversation, sequence: String(seq), active: 'true', sub_agent_id: '', sys_created_on: now(), sys_updated_on: now(), content: JSON.stringify({sender, text, complete: sender !== 'user', ...extra}) };
+    tables[MESSAGE].push(row); context.api.automationMessageChanged(record(MESSAGE, row.sys_id), null); return row;
+  }
+  function notifyMessage(row) { context.api.automationMessageChanged(record(MESSAGE, row.sys_id), null); }
+  function process(id) { context.api.automationProcess(id || tables[WORK].find(r => r.kind === 'turn')?.sys_id || tables[WORK][0]?.sys_id); }
+  function tick(seconds = 10) { options.now += seconds * 1000; }
+  function candidate(job) { return tables[WORK].find(r => r.kind === 'turn_pending' && JSON.parse(r.prepared_json || '{}').rootJobId === job.sys_id); }
+  function settle(job) { const c = candidate(job); process(c?.sys_id); tick(); process(c?.sys_id); return tables[WORK].find(r => r.kind === 'turn' && r.message_id === c?.message_id); }
+  function enqueue() {
+    const pending = tables[MESSAGE].splice(2); const job = nativeJob(); tables[MESSAGE].push(...pending); transition(job, 'completed');
+    const c = candidate(job); process(c?.sys_id); tick(); process(c?.sys_id); return tables[WORK].find(r => r.kind === 'turn');
+  }
+  function callback({ jobId = tables[WORK].find(r => ['turn', 'revision'].includes(r.kind))?.sys_id, model = 'gpt-5.6-sol', config = ID.config, prompt = ID.prompt, outcome = 'completed', featureStatus = 'success', envelopeStatus = 'success', answer = coachingAnswer() } = {}) {
     context.api.automationCallback({ result: { [CAPABILITY]: { status: featureStatus, meta: { automationJobId: jobId, configId: config, promptConfigId: prompt }, result: { status: envelopeStatus, model, response: JSON.stringify(answer) } } } }, outcome);
   }
-  return { options, tables, writes, prefs, user, conversation, call, enqueue, process, callback, record, api: context.api, now };
+  return { options, tables, writes, prefs, user, conversation, call, enqueue, process, callback, record, api: context.api, now, nativeJob, transition, addMessage, notifyMessage, tick, candidate, settle };
 }
 function coachingAnswer() {
   return {
@@ -199,6 +219,7 @@ function secondTool(f) {
   f.tables[MESSAGE].push({ ...f.tables[MESSAGE].find(row => row.sys_id === ID.tool), sys_id: ID.tool2, sequence: '5', content: JSON.stringify({ sender: 'assistant-tool', complete: true, success: true, toolUseId: 'native-tool-2', toolName: 'write_summary', result: 'PRIVATE_SECOND_RESULT' }) });
   return f.enqueue(ID.tool2);
 }
+
 
 test('settings are private to current user, default off, strictly typed and cannot set another owner', () => {
   const f = fixture({ seedPreferences: false });
@@ -229,176 +250,6 @@ test('settings epochs change only for actual configuration changes and disabling
   assert.equal(f.call('automationSaveSettings', same).status, 400);
   assert.equal(f.call('automationSaveSettings', { ...same, automaticEnabled: false, activeCoachEnabled: false }).status, 200);
   assert.notEqual(f.prefs.epoch, 'initial-epoch');
-});
-
-test('only newly completed native tool rows enqueue, deduplicated even on repeated notification', () => {
-  for (const content of [{ sender: 'assistant', complete: true }, { sender: 'assistant-tool', complete: false }, { sender: 'assistant-tool', complete: 'true' }]) {
-    const f = fixture(); f.tables[MESSAGE][3].content = JSON.stringify(content); f.enqueue();
-    assert.equal(f.tables[WORK].length, 0);
-  }
-  const f = fixture();
-  const complete = f.record(MESSAGE, ID.tool);
-  f.options.operation = 'update';
-  f.enqueue(ID.tool, complete);
-  assert.equal(f.tables[WORK].length, 0);
-  f.options.operation = 'insert';
-  const first = f.enqueue(); f.enqueue();
-  assert.equal(f.tables[WORK].length, 1);
-  assert.equal(f.writes.events.length, 1);
-  assert.equal(first.user, ID.user);
-  assert.equal(first.status, 'queued');
-  assert.equal(f.writes.inference.length, 0, 'native transaction only enqueues');
-  assert.ok(!JSON.stringify(first).includes('RAW_PRIVATE'));
-});
-
-test('opt-out, inactive owners, internal conversations and absent native roles prevent automatic enqueue', () => {
-  for (const mutate of [
-    f => { f.prefs.automatic_enabled = 'false'; },
-    f => { f.user.active = 'false'; },
-    f => { f.conversation.internal = '1'; },
-    f => { f.tables.sys_user_has_role.length = 0; },
-  ]) {
-    const f = fixture(); mutate(f); f.enqueue();
-    assert.equal(f.tables[WORK].length, 0);
-    assert.equal(f.writes.inference.length, 0);
-  }
-});
-
-test('worker uses native ownership and latest consent again before model submission', () => {
-  for (const mutate of [
-    f => { f.conversation.user = ID.other; },
-    f => { f.conversation.internal = 'true'; },
-    f => { f.user.active = 'false'; },
-    f => { f.tables.sys_user_has_role.length = 0; },
-    f => { f.tables[WORK][0].user = ID.other; },
-  ]) {
-    const f = fixture(); f.enqueue(); mutate(f); f.process();
-    assert.equal(f.writes.inference.length, 0);
-    assert.ok(['failed', 'ignored'].includes(f.tables[WORK][0].status));
-  }
-  const f = fixture(); f.enqueue();
-  f.call('automationSaveSettings', { automaticEnabled: false, activeCoachEnabled: true, modelId: 'gpt-5.6-sol' });
-  f.call('automationSaveSettings', { automaticEnabled: true, activeCoachEnabled: true, modelId: 'gpt-5.6-sol' });
-  f.process();
-  assert.equal(f.tables[WORK][0].status, 'ignored', 'disable/re-enable cannot resurrect an old epoch');
-  assert.equal(f.writes.inference.length, 0);
-});
-
-test('checkpoint contains history only through the completed tool and sends no raw tool material', () => {
-  const f = fixture(); f.enqueue();
-  f.tables[MESSAGE].push({ sys_id: 'f'.repeat(32), conversation: ID.conversation, sequence: '6', content: JSON.stringify({ sender: 'user', text: 'FUTURE_PRIVATE_PROMPT' }) });
-  f.process();
-  assert.equal(f.tables[WORK][0].status, 'running');
-  assert.equal(f.writes.inference.length, 1);
-  const request = f.writes.inference[0];
-  assert.equal(request.mode, 'async');
-  assert.equal(request.executionRequests[0].meta.automationJobId, f.tables[WORK][0].sys_id);
-  const prompt = request.executionRequests[0].payload.prompt;
-  for (const hidden of ['RAW_PRIVATE_TOOL_INPUT', 'RAW_PRIVATE_TOOL_RESULT', 'FUTURE_PRIVATE_PROMPT']) assert.ok(!prompt.includes(hidden));
-  assert.match(prompt, /every region/);
-  assert.match(prompt, /"failedToolCalls":1/);
-  assert.equal(f.tables[MEMORY][0].lease_id, f.tables[WORK][0].sys_id);
-  assert.ok(f.writes.scheduled.some(event => Date.parse(event.when.replace(' ', 'T') + 'Z') > f.options.now + 300000), 'a timeout check is scheduled for stalled work');
-});
-
-test('tools in one conversation remain queued in order and consume progressive memory from the previous result', () => {
-  const f = fixture(); const first = f.enqueue(); const second = secondTool(f);
-  f.process(second.sys_id);
-  assert.equal(f.writes.inference.length, 0);
-  assert.equal(second.status, 'queued');
-  f.process(first.sys_id); f.process(first.sys_id); f.process(second.sys_id);
-  assert.equal(f.writes.inference.length, 1);
-  f.callback({ jobId: first.sys_id });
-  assert.equal(first.status, 'completed');
-  assert.equal(f.tables[MEMORY][0].lease_id, '');
-  assert.equal(first.prepared_json, '');
-  f.process(second.sys_id);
-  assert.equal(f.writes.inference.length, 2);
-  assert.match(f.writes.inference[1].executionRequests[0].payload.prompt, /Preserve explicitly requested coverage and verify/);
-  f.callback({ jobId: second.sys_id });
-  assert.equal(second.status, 'completed');
-  assert.equal(JSON.parse(second.result_json).tip, false, 'same turn advice is not shown for every tool');
-  assert.equal(JSON.parse(f.tables[MEMORY][0].memory_json).entries.length, 1);
-});
-
-test('worker respects another active lease and does not clear it on a rejected callback', () => {
-  const f = fixture(); const first = f.enqueue(); f.process();
-  const memory = f.tables[MEMORY][0]; memory.lease_id = '9'.repeat(32);
-  f.callback();
-  assert.equal(first.status, 'failed');
-  assert.equal(memory.lease_id, '9'.repeat(32));
-  assert.equal(memory.memory_json, undefined);
-  assert.equal(first.prepared_json, '');
-});
-
-test('callback binds the requested model/configuration and validates evidence before persisting memory', () => {
-  for (const callback of [
-    { model: 'claude-opus-5' }, { model: '' }, { config: ID.other }, { prompt: ID.other },
-    { outcome: 'failed' }, { featureStatus: 'failed' }, { envelopeStatus: 'failed' },
-    { answer: { relevantTip: null, memoryUpdates: [{ ...coachingAnswer().memoryUpdates[0], evidenceTurnIds: ['T999'] }] } },
-  ]) {
-    const f = fixture(); f.enqueue(); f.process(); f.callback(callback);
-    assert.equal(f.tables[WORK][0].status, 'failed');
-    assert.equal(f.tables[WORK][0].prepared_json, '');
-    assert.equal(f.tables[MEMORY][0].memory_json, undefined);
-    assert.equal(f.tables[MEMORY][0].lease_id, '');
-  }
-  const valid = fixture(); valid.enqueue(); valid.process(); valid.callback({ model: 'gpt-5.6-sol-2026-10-01' });
-  assert.equal(valid.tables[WORK][0].status, 'completed');
-  const writes = valid.writes.updates.length;
-  valid.callback({ outcome: 'failed' });
-  assert.equal(valid.writes.updates.length, writes, 'duplicate terminal callbacks have no effects');
-});
-
-test('callback rechecks epoch, ownership, internal status and native eligibility without rereading transcript', () => {
-  for (const mutate of [
-    f => { f.prefs.epoch = 'new-epoch'; },
-    f => { f.prefs.automatic_enabled = 'false'; },
-    f => { f.conversation.user = ID.other; },
-    f => { f.conversation.internal = '1'; },
-    f => { f.tables.sys_user_has_role.length = 0; },
-  ]) {
-    const f = fixture(); f.enqueue(); f.process(); mutate(f);
-    const reads = f.writes.reads.length;
-    f.callback();
-    assert.ok(['failed', 'ignored'].includes(f.tables[WORK][0].status));
-    assert.equal(f.tables[MEMORY][0].memory_json, undefined);
-    assert.equal(f.writes.reads.slice(reads).filter(read => read.table === MESSAGE).length, 0);
-  }
-});
-
-test('timeouts release their own lease and discard transient model input without late callback resurrection', () => {
-  const f = fixture(); f.enqueue(); f.process();
-  f.options.now += 301000;
-  f.process();
-  assert.equal(f.tables[WORK][0].status, 'failed');
-  assert.equal(f.tables[WORK][0].prepared_json, '');
-  assert.equal(f.tables[MEMORY][0].lease_id, '');
-  f.callback();
-  assert.equal(f.tables[WORK][0].status, 'failed');
-  assert.equal(f.tables[MEMORY][0].memory_json, undefined);
-});
-
-test('provider failures never leak provider diagnostics or modify native conversations', () => {
-  for (const options of [{ providerThrows: true }, { submission: { status: 'failed', error: 'SECRET_PROVIDER_DIAGNOSTIC' } }, { routes: [] }]) {
-    const f = fixture(options); f.enqueue(); f.process();
-    assert.equal(f.tables[WORK][0].status, 'failed');
-    assert.equal(f.tables[WORK][0].prepared_json, '');
-    assert.ok(!JSON.stringify(f.tables[WORK][0]).includes('SECRET_PROVIDER_DIAGNOSTIC'));
-    assert.ok(f.writes.updates.concat(f.writes.inserts).every(write => [PREFS, MEMORY, WORK].includes(write.table)));
-  }
-});
-
-test('state is available only to the exact owner with native foreground read access', () => {
-  const f = fixture(); f.enqueue(); f.process(); f.callback();
-  const state = f.call('automationState', {}, {}, { conversationId: ID.conversation });
-  assert.equal(state.status, 200);
-  assert.equal(state.body.memoryTipCount, 1);
-  assert.equal(state.body.latestTip.suggestion, coachingAnswer().relevantTip.message);
-  f.options.userId = ID.other;
-  assert.equal(f.call('automationState', {}, {}, { conversationId: ID.conversation }).status, 404);
-  f.options.userId = ID.user; f.options.denyConversation = true;
-  assert.equal(f.call('automationState', {}, {}, { conversationId: ID.conversation }).status, 404);
 });
 
 test('revision requires active opt-in and rejects another owner even when native ACL grants admin read access', () => {
@@ -484,142 +335,6 @@ test('disabling or changing model during a revision prevents the stale result fr
 });
 
 
-test('competing workers cannot submit the same queued event twice after an atomic claim', () => {
-  const f = fixture(); const job = f.enqueue();
-  f.options.beforeUpdateMultiple = ({ table, pending, tables }) => {
-    if (table !== WORK || pending.status !== 'preparing') return;
-    f.options.beforeUpdateMultiple = null;
-    const row = tables[WORK].find(item => item.sys_id === job.sys_id);
-    row.status = 'running'; row.run_token = 'competing-worker'; row.started_at = f.now();
-  };
-  f.process();
-  assert.equal(f.writes.inference.length, 0);
-  assert.equal(job.run_token, 'competing-worker');
-  assert.equal(job.status, 'running');
-  const reentrant = fixture(); reentrant.enqueue();
-  reentrant.options.onInference = () => reentrant.process();
-  reentrant.process();
-  assert.equal(reentrant.writes.inference.length, 1);
-});
-
-test('an active lease held by another event defers work without overwriting the lease', () => {
-  const f = fixture(); const job = f.enqueue();
-  f.options.beforeUpdateMultiple = ({ table, pending, tables }) => {
-    if (table !== MEMORY || !pending.lease_id) return;
-    f.options.beforeUpdateMultiple = null;
-    tables[MEMORY][0].lease_id = '9'.repeat(32);
-    tables[MEMORY][0].lease_until = '2026-10-22 20:10:00';
-  };
-  f.process();
-  assert.equal(f.writes.inference.length, 0);
-  assert.equal(job.status, 'queued');
-  assert.equal(f.tables[MEMORY][0].lease_id, '9'.repeat(32));
-  assert.ok(f.writes.scheduled.length > 0);
-});
-
-test('changed source message binding fails closed and does not analyze another conversation', () => {
-  const f = fixture(); const job = f.enqueue();
-  f.tables[MESSAGE][3].conversation = 'f'.repeat(32);
-  f.process();
-  assert.equal(job.status, 'failed');
-  assert.equal(f.writes.inference.length, 0);
-  assert.equal(job.prepared_json, '');
-});
-
-test('state hides previous-epoch balloons after re-enabling while retaining bounded coaching memory', () => {
-  const f = fixture(); f.enqueue(); f.process(); f.callback();
-  f.call('automationSaveSettings', { automaticEnabled: false, activeCoachEnabled: true, modelId: 'gpt-5.6-sol' });
-  f.call('automationSaveSettings', { automaticEnabled: true, activeCoachEnabled: true, modelId: 'gpt-5.6-sol' });
-  const state = f.call('automationState', {}, {}, { conversationId: ID.conversation });
-  assert.equal(state.body.latestTip, undefined);
-  assert.equal(state.body.memoryTipCount, 1);
-  f.options.denyMessages = true;
-  assert.equal(f.call('automationState', {}, {}, { conversationId: ID.conversation }).status, 403);
-});
-
-test('real One Extend envelopes preserve selection for both supported models and reject missing success status', () => {
-  for (const model of ['gpt-5.6-sol', 'claude-opus-5']) {
-    const f = fixture();
-    f.call('automationSaveSettings', { automaticEnabled: true, activeCoachEnabled: true, modelId: model });
-    const job = f.enqueue(); f.process();
-    assert.equal(job.model, model);
-    const requestMeta = f.writes.inference[0].executionRequests[0].meta;
-    assert.equal(requestMeta.configId, ID.config);
-    assert.equal(requestMeta.promptConfigId, ID.prompt);
-    f.callback({ model });
-    assert.equal(job.status, 'completed');
-    assert.equal(JSON.parse(job.result_json).actualModel, model);
-  }
-  const f = fixture(); const job = f.enqueue(); f.process();
-  f.callback({ featureStatus: '' });
-  assert.equal(job.status, 'failed');
-  assert.equal(f.tables[MEMORY][0].memory_json, undefined);
-});
-
-
-test('concurrent duplicate callback cannot overwrite the first completed result after reading stale running state', () => {
-  const f = fixture(); const job = f.enqueue(); f.process();
-  let reentered = false;
-  f.options.onRecordNext = ({ table, row }) => {
-    if (table !== WORK || row.sys_id !== job.sys_id || row.status !== 'running') return;
-    f.options.onRecordNext = null;
-    reentered = true;
-    f.callback();
-  };
-  f.callback({ model: 'claude-opus-5' });
-  assert.equal(reentered, true);
-  assert.equal(job.status, 'completed', 'stale invalid callback must not replace the completed first result');
-  assert.equal(JSON.parse(job.result_json).actualModel, 'gpt-5.6-sol');
-  assert.equal(JSON.parse(f.tables[MEMORY][0].memory_json).entries.length, 1);
-  assert.equal(f.tables[MEMORY][0].lease_id, '');
-  assert.equal(f.writes.updates.filter(write => write.table === WORK && write.row.status === 'completed').length, 1);
-});
-
-test('late completion of an older tool analyzes its historical context while preserving newer memory and balloon', () => {
-  const f = fixture();
-  f.tables[MESSAGE][1].sequence = '3';
-  f.tables[MESSAGE][2].sequence = '4';
-  f.tables[MESSAGE][3].sequence = '5';
-  const historical = { sys_id: ID.tool2, conversation: ID.conversation, sequence: '2', sys_created_on: f.now(), content: JSON.stringify({ sender: 'assistant-tool', complete: false, success: true, toolUseId: 'older-delayed-tool', toolName: 'write_summary' }) };
-  f.tables[MESSAGE].push(historical);
-  const latestJob = f.enqueue(); f.process(); f.callback();
-  assert.equal(latestJob.status, 'completed');
-  const memory = f.tables[MEMORY][0];
-  const latestTip = memory.latest_tip_json;
-  const lastJob = memory.last_job;
-  const previous = f.record(MESSAGE, ID.tool2);
-  historical.content = JSON.stringify({ ...JSON.parse(historical.content), complete: true });
-  f.options.operation = 'update';
-  const lateJob = f.enqueue(ID.tool2, previous);
-  f.process(lateJob.sys_id);
-  assert.equal(lateJob.status, 'running');
-  const prompt = f.writes.inference[1].executionRequests[0].payload.prompt;
-  assert.ok(!prompt.includes('I did not ask for the current region only'));
-  assert.ok(!prompt.includes(coachingAnswer().memoryUpdates[0].guidance));
-  f.callback({ jobId: lateJob.sys_id, answer: {
-    relevantTip: null,
-    memoryUpdates: [{ turnId: 'T1', category: 'prompt_clarity', guidance: 'Keep the intended summary audience explicit when it affects which details are useful.', evidenceTurnIds: ['T1'] }],
-  } });
-  assert.equal(lateJob.status, 'completed');
-  assert.equal(JSON.parse(lateJob.result_json).tip, false);
-  assert.equal(memory.last_job, lastJob);
-  assert.equal(memory.latest_tip_json, latestTip);
-  const entries = JSON.parse(memory.memory_json).entries;
-  assert.equal(entries.length, 2);
-  assert.equal(entries[1].guidance, coachingAnswer().memoryUpdates[0].guidance);
-  assert.deepEqual(entries[1].evidenceTurnIds, ['T2']);
-});
-
-test('stalled validation is timed out and cannot block later events indefinitely', () => {
-  const f = fixture(); const job = f.enqueue(); f.process();
-  job.status = 'validating'; f.options.now += 301000;
-  f.process();
-  assert.equal(job.status, 'failed');
-  assert.equal(job.prepared_json, '');
-  assert.equal(f.tables[MEMORY][0].lease_id, '');
-});
-
-
 test('first-prompt revisions require an active eligible native Build Agent user before any inference', () => {
   for (const mutate of [f => { f.user.active = 'false'; }, f => { f.tables.sys_user_has_role.length = 0; }]) {
     const f = fixture(); mutate(f);
@@ -672,19 +387,219 @@ test('completed first-prompt revisions remain private and are unavailable after 
 });
 
 
-test('native terminal insert enqueues even when previous contains the inserted complete values', () => {
-  const f = fixture();
-  const populatedPrevious = f.record(MESSAGE, ID.tool);
-  f.options.operation = 'insert';
-  const job = f.enqueue(ID.tool, populatedPrevious);
-  assert.ok(job);
-  assert.equal(f.tables[WORK].length, 1);
-  assert.equal(f.writes.events.length, 1);
-  f.enqueue(ID.tool, populatedPrevious);
-  assert.equal(f.tables[WORK].length, 1, 'request fingerprint still deduplicates repeated insert notifications');
-  assert.equal(f.writes.events.length, 1);
-  const updated = fixture();
-  updated.options.operation = 'update';
-  updated.enqueue(ID.tool, updated.record(MESSAGE, ID.tool));
-  assert.equal(updated.tables[WORK].length, 0, 'already complete updates do not generate another checkpoint');
+
+test('five completed tools wait for native terminal and final assistant, then one full-turn analysis', () => {
+  const f = fixture(); f.tables[MESSAGE].splice(2); const native = f.nativeJob(); const candidate = f.candidate(native);
+  assert.equal(JSON.parse(candidate.prepared_json).fence, 2);
+  f.addMessage('user', 'Include every region; I did not ask for the current region only.');
+  for (let i = 0; i < 5; i++) { f.addMessage('assistant-tool', '', {toolName: 'write_summary', toolUseId: 'tool-' + i, success: i !== 0, toolInput: {secret: 'RAW_PRIVATE_INPUT'}, result: 'RAW_PRIVATE_RESULT'}); f.process(candidate.sys_id); }
+  assert.equal(f.writes.inference.length, 0); assert.equal(f.tables[WORK].length, 1);
+  f.transition(native, 'completed'); f.process(candidate.sys_id); f.tick(5);
+  f.addMessage('assistant', 'All regions now appear in the summary. The initial validation error was fixed.');
+  f.process(candidate.sys_id); f.tick(9); f.process(candidate.sys_id); assert.equal(f.writes.inference.length, 0);
+  f.tick(1); f.process(candidate.sys_id); const work = f.tables[WORK].find(r => r.kind === 'turn'); assert.ok(work);
+  f.process(work.sys_id); f.process(work.sys_id); assert.equal(f.writes.inference.length, 1);
+  const prompt = f.writes.inference[0].executionRequests[0].payload.prompt;
+  assert.match(prompt, /All regions now appear/); assert.match(prompt, /initial validation error was fixed/); assert.match(prompt, /"completedToolCalls":5/); assert.match(prompt, /"failedToolCalls":1/);
+  assert.ok(!prompt.includes('RAW_PRIVATE')); assert.match(prompt, /"status":"completed"/);
+  assert.ok(!candidate.prepared_json.includes('regions')); assert.equal(JSON.parse(candidate.prepared_json).workId, work.sys_id);
+});
+
+test('completed no-tool responses are analyzed once, while intermediate complete prose is not a terminal signal', () => {
+  const f = fixture(); const native = f.nativeJob(); const c = f.candidate(native);
+  f.addMessage('user', 'Explain the report.'); f.addMessage('assistant', 'First I will inspect it.', {duration: 100}); f.process(c.sys_id); f.tick(30); f.process(c.sys_id);
+  assert.equal(f.writes.inference.length, 0); assert.equal(f.tables[WORK].filter(r => r.kind === 'turn').length, 0);
+  f.addMessage('assistant', 'The report summarizes every region.', {duration: 300}); f.transition(native, 'completed'); const work = f.settle(native); f.process(work.sys_id);
+  assert.equal(f.writes.inference.length, 1); assert.match(f.writes.inference[0].executionRequests[0].payload.prompt, /"completedToolCalls":0/);
+});
+
+test('terminal callback before final persistence restarts a ten-second stable snapshot interval', () => {
+  const f = fixture(); const native = f.nativeJob(); f.addMessage('user', 'Explain it.'); f.addMessage('assistant', 'Interim explanation.'); f.transition(native, 'completed'); const c = f.candidate(native);
+  f.process(c.sys_id); f.tick(9); const final = f.addMessage('assistant', 'FINAL_RESPONSE_MUST_BE_INCLUDED'); f.process(c.sys_id); f.tick(1); f.process(c.sys_id);
+  assert.equal(f.tables[WORK].filter(r => r.kind === 'turn').length, 0);
+  f.tick(9); f.process(c.sys_id); const work = f.tables[WORK].find(r => r.kind === 'turn'); f.process(work.sys_id);
+  assert.match(f.writes.inference[0].executionRequests[0].payload.prompt, /FINAL_RESPONSE_MUST_BE_INCLUDED/);
+  assert.equal(JSON.parse(work.prepared_json).boundary.endSequence, Number(final.sequence));
+});
+
+test('repeated native transitions and competing candidate workers create one inference per prompt', () => {
+  const f = fixture(); const work = f.enqueue(); const native = f.tables[JOB][0]; const c = f.candidate(native);
+  f.transition(native, 'completed'); f.process(c.sys_id); f.process(c.sys_id); f.process(work.sys_id); f.process(work.sys_id);
+  assert.equal(f.tables[WORK].filter(r => r.kind === 'turn').length, 1); assert.equal(f.writes.inference.length, 1);
+  f.callback(); f.transition(native, 'completed'); f.notifyMessage(f.tables[MESSAGE][3]); f.process(c.sys_id); f.process(work.sys_id);
+  assert.equal(f.writes.inference.length, 1); assert.equal(work.status, 'completed'); assert.equal(work.prepared_json, '');
+});
+
+test('late terminal processing binds the fenced prompt and excludes the next user prompt and its response', () => {
+  const f = fixture(); f.tables[MESSAGE].splice(2); const native = f.nativeJob(); const prompt = f.addMessage('user', 'Include every region; I did not ask for the current region only.'); f.addMessage('assistant', 'All regions included.');
+  f.addMessage('user', 'FUTURE_PRIVATE_PROMPT'); f.addMessage('assistant', 'FUTURE_PRIVATE_RESPONSE'); f.transition(native, 'completed'); const work = f.settle(native); f.process(work.sys_id);
+  assert.equal(work.message_id, prompt.sys_id); const input = f.writes.inference[0].executionRequests[0].payload.prompt; assert.ok(!input.includes('FUTURE_PRIVATE'));
+  f.callback(); assert.equal(work.status, 'completed');
+});
+
+test('unrelated later prompts do not invalidate an in-flight completed-turn result', () => {
+  const f = fixture(); const work = f.enqueue(); f.process(); f.addMessage('user', 'FUTURE_PRIVATE_PROMPT'); f.addMessage('assistant', 'FUTURE_PRIVATE_RESPONSE'); f.callback();
+  assert.equal(work.status, 'completed'); assert.equal(JSON.parse(f.tables[MEMORY][0].memory_json).entries.length, 1);
+});
+
+test('late writes or source changes after inference prevent publishing partial or stale coaching without another model call', () => {
+  for (const mutate of [f => f.addMessage('assistant', 'A late final response.'), f => {f.tables[MESSAGE][2].content = JSON.stringify({sender: 'user', text: 'Replaced prompt'});}, f => {f.tables[JOB][0].status = 'running';}]) {
+    const f = fixture(); const work = f.enqueue(); f.process(); mutate(f); f.callback();
+    assert.equal(work.status, 'failed'); assert.equal(work.prepared_json, ''); assert.equal(f.tables[MEMORY][0].memory_json, undefined); f.process(); assert.equal(f.writes.inference.length, 1);
+  }
+});
+
+test('resumed attempt before inference waits for terminal state and includes its final response once', () => {
+  const f = fixture(); const work = f.enqueue(); const original = f.tables[JOB][0];
+  const resumed = f.nativeJob({resumed_from_job: original.job_id, attempt_number: '2'}); f.transition(resumed, 'running'); f.process(work.sys_id); f.tick(30); f.process(work.sys_id);
+  assert.equal(f.writes.inference.length, 0); f.addMessage('assistant', 'RESUMED_FINAL_OUTPUT'); f.transition(resumed, 'completed');
+  f.settle(original); f.process(work.sys_id); assert.equal(f.writes.inference.length, 1); assert.match(f.writes.inference[0].executionRequests[0].payload.prompt, /RESUMED_FINAL_OUTPUT/);
+  assert.equal(JSON.parse(work.prepared_json).boundary.nativeJobId, resumed.sys_id); f.callback(); assert.equal(work.status, 'completed');
+  const again = f.nativeJob({resumed_from_job: resumed.job_id, attempt_number: '3'}); f.transition(again, 'completed'); f.tick(20); f.process(f.candidate(original).sys_id); f.process(work.sys_id); assert.equal(f.writes.inference.length, 1);
+});
+
+test('resume arriving during atomic lease claim is rechecked immediately before model submission', () => {
+  const f = fixture(); const work = f.enqueue();
+  f.options.beforeUpdateMultiple = ({table,pending}) => { if (table !== WORK || pending.status !== 'preparing') return; f.options.beforeUpdateMultiple = null; f.nativeJob({resumed_from_job: f.tables[JOB][0].job_id, attempt_number: '2'}); };
+  f.process(work.sys_id); assert.equal(work.status, 'queued'); assert.equal(f.writes.inference.length, 0); assert.equal(f.tables[MEMORY][0].lease_id, '');
+});
+
+test('failed and interrupted native turns are explicitly partial and retain final outcome context', () => {
+  for (const status of ['failed', 'interrupted']) {
+    const f = fixture(); const native = f.nativeJob(); f.addMessage('user', 'Create the report.'); f.addMessage('assistant-tool', '', {success:false, toolName:'create_report', toolUseId:'x', result:'PRIVATE_ERROR'}); f.addMessage('assistant', 'The report was not completed.'); f.transition(native, status); const work = f.settle(native); f.process(work.sys_id);
+    assert.equal(f.writes.inference.length, 1); const input = f.writes.inference[0].executionRequests[0].payload.prompt; assert.match(input, new RegExp('"status":"' + status + '"')); assert.ok(!input.includes('PRIVATE_ERROR')); assert.match(input, /The report was not completed/);
+  }
+});
+
+test('unsettled terminal turns time out without model calls, and idle nonterminal jobs never infer completion', () => {
+  const f = fixture(); const native = f.nativeJob(); f.addMessage('user', 'Explain it.'); f.transition(native, 'completed'); const c = f.candidate(native); f.process(c.sys_id); f.tick(91); f.process(c.sys_id);
+  assert.equal(c.status, 'failed'); assert.ok(!c.prepared_json.includes('Explain it.')); assert.equal(f.writes.inference.length, 0);
+  const active = fixture(); const running = active.nativeJob(); active.addMessage('user','Explain it.'); active.addMessage('assistant','Intermediate text.'); active.transition(running,'running'); active.tick(1000); active.process(active.candidate(running).sys_id);
+  assert.equal(active.writes.inference.length,0); assert.equal(active.tables[WORK].length,1);
+});
+
+test('ambiguous queued jobs, changed prompt binding, malformed or duplicate sequence fail closed', () => {
+  const ambiguous = fixture(); const a = ambiguous.nativeJob(); ambiguous.transition(a,'completed'); const b = ambiguous.nativeJob(); ambiguous.addMessage('user','Which request owns this?'); ambiguous.addMessage('assistant','Unknown.'); ambiguous.transition(a,'completed'); ambiguous.transition(b,'completed'); ambiguous.settle(a); ambiguous.settle(b);
+  assert.equal(ambiguous.writes.inference.length,0); assert.equal(ambiguous.tables[WORK].filter(r => r.kind === 'turn').length,0);
+  for (const mutate of [f => {f.tables[MESSAGE][3].content = '{';}, f => {f.tables[MESSAGE][3].sequence='3';}, f => {f.tables[MESSAGE][2].conversation=ID.other;}]) {
+    const f = fixture(); const work = f.enqueue(); mutate(f); f.process(work.sys_id); assert.equal(f.writes.inference.length,0); assert.equal(work.status,'failed');
+  }
+});
+
+test('hidden checkpoint prompts and sub-agent records never become coaching user turns', () => {
+  const f=fixture(); const native=f.nativeJob(); f.addMessage('user','Hidden checkpoint marker',{isHidden:true}); const prompt=f.addMessage('user','Visible next request.'); const child=f.addMessage('user','INTERNAL_SUBAGENT_REQUEST'); child.sub_agent_id='nested'; f.addMessage('assistant','Visible response.'); f.transition(native,'completed'); const work=f.settle(native); f.process(work.sys_id);
+  assert.equal(work.message_id,prompt.sys_id); const input=f.writes.inference[0].executionRequests[0].payload.prompt; assert.ok(!input.includes('Hidden checkpoint marker')); assert.ok(!input.includes('INTERNAL_SUBAGENT_REQUEST'));
+});
+
+test('native inserts only capture opted-in interactive owners and do not backfill terminal or updated jobs', () => {
+  for (const overrides of [{status:'completed'},{status:'running'},{pool:'non-interactive'},{internal:'true'},{attempt_number:'2'}]) {const f=fixture();f.nativeJob(overrides);assert.equal(f.tables[WORK].length,0);}
+  for (const mutate of [f=>{f.prefs.automatic_enabled='false';},f=>{f.user.active='false';},f=>{f.conversation.internal='1';},f=>{f.tables.sys_user_has_role.length=0;}]) {const f=fixture();mutate(f);f.nativeJob();assert.equal(f.tables[WORK].length,0);}
+  const f=fixture(); f.api.automationToolCompleted(f.record(MESSAGE,ID.tool),null); assert.equal(f.tables[WORK].length,0);
+});
+
+test('worker and callback recheck exact owner, opt-in epoch and native eligibility', () => {
+  for (const mutate of [f=>{f.prefs.automatic_enabled='false';},f=>{f.prefs.epoch='new';},f=>{f.user.active='false';},f=>{f.tables.sys_user_has_role.length=0;},f=>{f.conversation.user=ID.other;},f=>{f.conversation.internal='true';}]) {
+    const f=fixture();const work=f.enqueue();mutate(f);f.process(work.sys_id);assert.equal(f.writes.inference.length,0);assert.ok(['failed','ignored'].includes(work.status));
+    const g=fixture();const submitted=g.enqueue();g.process(submitted.sys_id);mutate(g);g.callback();assert.ok(['failed','ignored'].includes(submitted.status));assert.equal(g.tables[MEMORY][0].memory_json,undefined);
+  }
+});
+
+test('legacy per-tool jobs and late callbacks are ignored and release only their own lease', () => {
+  for(const callback of [false,true]) {
+    const f=fixture(); const work={sys_id:'9'.repeat(32),kind:'tool',user:ID.user,conversation_id:ID.conversation,epoch:f.prefs.epoch,status:callback?'running':'queued',prepared_json:'PRIVATE_OLD_TRANSCRIPT'}; f.tables[WORK].push(work); f.tables[MEMORY].push({sys_id:'a'.repeat(32),lease_id:work.sys_id,lease_until:f.now()});
+    if(callback)f.callback({jobId:work.sys_id});else f.process(work.sys_id);assert.equal(work.status,'ignored');assert.equal(work.prepared_json,'');assert.equal(f.tables[MEMORY][0].lease_id,'');assert.equal(f.writes.inference.length,0);
+  }
+});
+
+test('per-conversation serialization lets later turns use prior coaching memory', () => {
+  const f=fixture();const first=f.enqueue();const native=f.nativeJob();f.addMessage('user','Now improve the format.');f.addMessage('assistant','Formatting improved.');f.transition(native,'completed');const second=f.settle(native);
+  f.process(second.sys_id);assert.equal(f.writes.inference.length,0);f.process(first.sys_id);f.process(second.sys_id);assert.equal(f.writes.inference.length,1);f.callback({jobId:first.sys_id});assert.equal(first.status,'completed');f.process(second.sys_id);assert.equal(f.writes.inference.length,2);assert.match(f.writes.inference[1].executionRequests[0].payload.prompt,/Preserve explicitly requested coverage and verify/);
+});
+
+test('atomic execution claim prevents duplicate model calls and respects another active lease', () => {
+  const f=fixture();const work=f.enqueue();f.options.beforeUpdateMultiple=({table,pending,tables})=>{if(table!==WORK||pending.status!=='preparing')return;f.options.beforeUpdateMultiple=null;const row=tables[WORK].find(r=>r.sys_id===work.sys_id);row.status='running';row.run_token='competitor';row.started_at=f.now();};f.process();assert.equal(f.writes.inference.length,0);assert.equal(work.run_token,'competitor');
+  const g=fixture();const queued=g.enqueue();g.options.beforeUpdateMultiple=({table,pending,tables})=>{if(table!==MEMORY||!pending.lease_id)return;g.options.beforeUpdateMultiple=null;tables[MEMORY][0].lease_id='9'.repeat(32);tables[MEMORY][0].lease_until='2026-10-22 20:10:00';};g.process();assert.equal(g.writes.inference.length,0);assert.equal(queued.status,'queued');assert.equal(g.tables[MEMORY][0].lease_id,'9'.repeat(32));
+});
+
+test('callbacks bind selected model and evidence, deduplicate callbacks and clean transient context', () => {
+  for(const callback of [{model:'claude-opus-5'},{config:ID.other},{prompt:ID.other},{outcome:'failed'},{featureStatus:''},{answer:{relevantTip:null,memoryUpdates:[{...coachingAnswer().memoryUpdates[0],evidenceTurnIds:['T999']}]}}]){const f=fixture();const work=f.enqueue();f.process();f.callback(callback);assert.equal(work.status,'failed');assert.equal(work.prepared_json,'');assert.equal(f.tables[MEMORY][0].memory_json,undefined);}
+  const f=fixture();const work=f.enqueue();f.process();f.callback();const writes=f.writes.updates.length;f.callback({outcome:'failed'});assert.equal(f.writes.updates.length,writes);assert.equal(work.status,'completed');assert.equal(work.prepared_json,'');assert.equal(f.tables[MEMORY][0].lease_id,'');
+});
+
+test('timeouts and provider failure release own lease without leaking diagnostics or writing native tables', () => {
+  const f=fixture();const work=f.enqueue();f.process();f.tick(301);f.process();assert.equal(work.status,'failed');f.callback();assert.equal(work.status,'failed');assert.equal(f.tables[MEMORY][0].lease_id,'');
+  for(const options of [{providerThrows:true},{submission:{status:'failed',error:'SECRET_PROVIDER_DIAGNOSTIC'}},{routes:[]}]){const g=fixture(options);const job=g.enqueue();g.process();assert.equal(job.status,'failed');assert.ok(!JSON.stringify(job).includes('SECRET_PROVIDER_DIAGNOSTIC'));assert.ok(g.writes.updates.concat(g.writes.inserts).every(write=>[WORK,MEMORY,PREFS].includes(write.table)));}
+});
+
+test('state exposes only exact owner memory and hides stale-epoch tips', () => {
+  const f=fixture();f.enqueue();f.process();f.callback();let result=f.call('automationState',{}, {},{conversationId:ID.conversation});assert.equal(result.body.memoryTipCount,1);assert.equal(result.body.latestTip.suggestion,coachingAnswer().relevantTip.message);f.options.userId=ID.other;assert.equal(f.call('automationState',{}, {},{conversationId:ID.conversation}).status,404);f.options.userId=ID.user;f.prefs.epoch='new';result=f.call('automationState',{}, {},{conversationId:ID.conversation});assert.equal(result.body.latestTip,undefined);assert.equal(result.body.memoryTipCount,1);
+});
+
+test('failed or interrupted turns analyze the available partial response including unfinished tools or no prose', () => {
+  for (const status of ['failed','interrupted']) for (const hasResponse of [true,false]) {
+    const f=fixture();const native=f.nativeJob();f.addMessage('user','Build the report.');if(hasResponse)f.addMessage('assistant-tool','',{complete:false,toolName:'build',toolUseId:'pending'});f.transition(native,status);const work=f.settle(native);assert.ok(work);f.process(work.sys_id);assert.equal(f.writes.inference.length,1);assert.match(f.writes.inference[0].executionRequests[0].payload.prompt,new RegExp('"status":"'+status+'"'));
+  }
+});
+
+test('different native job fences mapping to the same next user prompt are ambiguous in both processing orders', () => {
+  for(const reverse of [false,true]){
+    const f=fixture();const a=f.nativeJob();f.transition(a,'completed');f.addMessage('assistant','Late previous-turn prose.');const b=f.nativeJob();f.addMessage('user','A request with ambiguous native ownership.');f.addMessage('assistant','Response.');f.transition(a,'completed');f.transition(b,'completed');const order=reverse?[b,a]:[a,b];for(const job of order)f.settle(job);assert.equal(f.tables[WORK].filter(r=>r.kind==='turn').length,0);assert.equal(f.writes.inference.length,0);assert.equal(f.candidate(a).status,'failed');assert.equal(f.candidate(b).status,'failed');
+  }
+});
+
+test('later ready turns wait for earlier settling candidates and consume their resulting memory', () => {
+  const f=fixture();f.tables[MESSAGE].splice(2);const earlier=f.nativeJob();f.addMessage('user','Include every region; I did not ask for the current region only.');const result=f.addMessage('assistant','Every region is included.');f.transition(earlier,'completed');
+  const later=f.nativeJob();f.addMessage('user','Now format it.');f.addMessage('assistant','Formatted the report.');f.transition(later,'completed');const second=f.settle(later);assert.ok(second);f.process(second.sys_id);assert.equal(f.writes.inference.length,0);
+  // Earlier candidate has only just taken its first terminal snapshot.
+  f.tick(10);f.process(second.sys_id);const first=f.tables[WORK].find(r=>r.kind==='turn'&&r.sys_id!==second.sys_id);assert.ok(first);assert.equal(f.writes.inference.length,0);f.process(first.sys_id);f.callback({jobId:first.sys_id});f.process(second.sys_id);assert.equal(f.writes.inference.length,2);assert.match(f.writes.inference[1].executionRequests[0].payload.prompt,/Preserve explicitly requested coverage and verify/);
+});
+
+test('legacy last-job tool sequences do not suppress the final turn tip, and old tool balloons are hidden', () => {
+  const f=fixture();const work=f.enqueue();const legacy={sys_id:'9'.repeat(32),kind:'tool',user:ID.user,conversation_id:ID.conversation,epoch:f.prefs.epoch,status:'completed',sequence:'999'};f.tables[WORK].push(legacy);f.tables[MEMORY].push({sys_id:'a'.repeat(32),memory_key:hash(ID.user+':'+ID.conversation),user:ID.user,conversation_id:ID.conversation,last_job:legacy.sys_id,latest_tip_json:JSON.stringify({id:legacy.sys_id,suggestion:'OLD_TOOL_TIP'})});
+  assert.equal(f.call('automationState',{}, {},{conversationId:ID.conversation}).body.latestTip,undefined);f.process(work.sys_id);f.callback({jobId:work.sys_id});assert.equal(work.status,'completed');assert.equal(JSON.parse(work.result_json).tip,true);assert.equal(f.tables[MEMORY][0].last_job,work.sys_id);
+});
+
+test('native fingerprint revalidation still guards a transcript write during execution claim', () => {
+  const f=fixture();const work=f.enqueue();f.options.beforeUpdateMultiple=({table,pending})=>{if(table!==WORK||pending.status!=='preparing')return;f.options.beforeUpdateMultiple=null;f.addMessage('assistant','Late response after queueing.');};f.process(work.sys_id);assert.equal(f.writes.inference.length,0);assert.equal(work.status,'queued');f.tick(10);f.process(work.sys_id);assert.equal(f.writes.inference.length,1);assert.match(f.writes.inference[0].executionRequests[0].payload.prompt,/Late response after queueing/);
+});
+
+test('a new tracked job cannot capture the delayed prompt of an already-running untracked job', () => {
+  const f=fixture();f.prefs.automatic_enabled='false';const old=f.nativeJob();f.transition(old,'running');f.prefs.automatic_enabled='true';const next=f.nativeJob();f.addMessage('user','Delayed old prompt');f.addMessage('assistant','Old answer');f.transition(next,'completed');assert.equal(f.tables[WORK].length,0);assert.equal(f.writes.inference.length,0);
+  const g=fixture();const a=g.nativeJob();g.nativeJob();assert.equal(g.candidate(a).status,'failed');g.addMessage('user','Ambiguous prompt');g.transition(a,'completed');g.process(g.candidate(a).sys_id);assert.equal(g.writes.inference.length,0);
+});
+
+test('revision uses the same visible active parent prompt numbering as automatic coaching', () => {
+  const f=fixture();const hidden={...f.tables[MESSAGE][0],sys_id:'d'.repeat(32),sequence:'0',content:JSON.stringify({sender:'user',text:'HIDDEN_USER',isHidden:true})};f.tables[MESSAGE].unshift(hidden);const sub={...hidden,sys_id:'e'.repeat(32),sequence:'0',sub_agent_id:'child',content:JSON.stringify({sender:'user',text:'SUB_AGENT_USER'})};f.tables[MESSAGE].unshift(sub);const inactive={...hidden,sys_id:'f'.repeat(32),sequence:'0',active:'false',content:JSON.stringify({sender:'user',text:'INACTIVE_USER'})};f.tables[MESSAGE].unshift(inactive);
+  const response=f.call('automationRevision',{conversationId:ID.conversation,draft:'Improve the report.'});assert.equal(response.status,202);const prompt=f.writes.inference[0].executionRequests[0].payload.prompt;for(const forbidden of ['HIDDEN_USER','SUB_AGENT_USER','INACTIVE_USER'])assert.ok(!prompt.includes(forbidden));assert.match(prompt,/"turnId":"T2","prompt":"Include every region/);
+});
+
+test('incompatible legacy tool memory is ignored by automatic and revision inputs without guessing turn IDs', () => {
+  for(const revision of [false,true]) {
+    const f=fixture();const legacy={sys_id:'9'.repeat(32),kind:'tool',status:'completed',sequence:'4'};f.tables[WORK].push(legacy);f.tables[MEMORY].push({sys_id:'8'.repeat(32),memory_key:hash(ID.user+':'+ID.conversation),user:ID.user,conversation_id:ID.conversation,last_job:legacy.sys_id,memory_json:JSON.stringify({version:1,entries:[{sourceTurnId:'T1',category:'prompt_clarity',guidance:'LEGACY_INCOMPATIBLE_GUIDANCE',evidenceTurnIds:['T1']}],recentTipKeys:[]})});
+    const hidden={...f.tables[MESSAGE][0],sys_id:'f'.repeat(32),sequence:'0',content:JSON.stringify({sender:'user',text:'HIDDEN_USER',isHidden:true})};
+    if(revision){f.tables[MESSAGE].unshift(hidden);f.call('automationRevision',{conversationId:ID.conversation,draft:'Improve the report.'});}else{const work=f.enqueue();f.tables[MESSAGE].unshift(hidden);f.process(work.sys_id);f.tick(10);f.process(work.sys_id);}
+    assert.equal(f.writes.inference.length,1);assert.ok(!f.writes.inference[0].executionRequests[0].payload.prompt.includes('LEGACY_INCOMPATIBLE_GUIDANCE'));assert.ok(f.tables[MEMORY][0].memory_json.includes('LEGACY_INCOMPATIBLE_GUIDANCE'),'read alone does not mutate prior memory');
+  }
+});
+
+test('settings revocation during the last native fingerprint read prevents model submission', () => {
+  const f=fixture();const work=f.enqueue();let snapshots=0;f.options.onRecordNext=({table,row})=>{if(table===MESSAGE&&row.sys_id===ID.tool){snapshots++;if(snapshots===2)f.prefs.automatic_enabled='false';}};f.process(work.sys_id);assert.equal(snapshots,2);assert.equal(f.writes.inference.length,0);assert.equal(work.status,'ignored');assert.equal(f.tables[MEMORY][0].lease_id,'');
+});
+
+test('callback revocation during native fingerprint read prevents publishing memory or a tip', () => {
+  for (const mutate of [f => { f.prefs.automatic_enabled = 'false'; }, f => { f.conversation.user = ID.other; }]) {
+    const f = fixture(); const work = f.enqueue(); f.process();
+    f.options.onRecordNext = ({table, row}) => { if (table !== MESSAGE || row.sys_id !== ID.tool) return; f.options.onRecordNext = null; mutate(f); };
+    const before = f.writes.updates.length; f.callback();
+    assert.ok(['ignored', 'failed'].includes(work.status)); assert.equal(f.tables[MEMORY][0].memory_json, undefined); assert.equal(f.tables[MEMORY][0].latest_tip_json, undefined);
+    assert.equal(f.writes.updates.slice(before).filter(write => write.table === MEMORY && write.row.memory_json).length, 0);
+    assert.equal(f.tables[MEMORY][0].lease_id, '');
+  }
+});
+
+test('callback rejects failed, ignored or rebound native-turn candidates even with an unchanged transcript', () => {
+  for (const mutate of [c => { c.status = 'failed'; }, c => { c.status = 'ignored'; }, c => { c.user = ID.other; }, c => { c.conversation_id = ID.other; }, c => { c.kind = 'revision'; }, c => { c.epoch = 'revoked'; }]) {
+    const f = fixture(); const work = f.enqueue(); f.process(); const candidate = f.candidate(f.tables[JOB][0]); mutate(candidate); f.callback({jobId: work.sys_id});
+    assert.equal(work.status, 'failed'); assert.equal(f.tables[MEMORY][0].memory_json, undefined); assert.equal(f.tables[MEMORY][0].latest_tip_json, undefined); assert.equal(f.tables[MEMORY][0].lease_id, '');
+  }
 });

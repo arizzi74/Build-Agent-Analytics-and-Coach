@@ -18,7 +18,7 @@ Built on ServiceNow using the **Now SDK Fluent DSL** (v4.13.3) with a React-base
 | **App Detail** | Deep dive into a single application — full metadata composition with deep-links, related conversations, usage by author, implementation duration, and partner-hour savings calculator |
 | **Conversation Detail** | Full conversation thread with messages (user, assistant, thinking, tool calls), token usage, NAU breakdown, message search, Markdown/Mermaid rendering, and **export to printable HTML/PDF** |
 | **Conversation Coaching** | Within Conversation Detail: prepare a prompt/response preview, select GPT-5.6 Sol or Opus 5 when available through One Extend, and generate concise coaching with specific prompt rewrites and linked evidence |
-| **Coach settings** | Personal automatic coaching after completed tools, a selectable model, and an optional floating Otto coach in Build Agent |
+| **Coach settings** | Personal automatic coaching after finished turns, a selectable model, and an optional Otto coach in Build Agent |
 | **Consumption** | Monthly NAU consumption per user, with month navigation, search, and drill-down to individual user profiles |
 | **User Profile** | Individual user analytics — donut chart of top 5 apps, per-app breakdown table, daily activity timeline bar chart, and lifetime KPIs |
 | **Performance** | Agent-level KPIs — task telemetry, build-fix cycles, and tool error rates |
@@ -114,7 +114,7 @@ Each table is queried with `sys_scope=<appId>`; tables belonging to uninstalled 
 | `x_snc_build_agranx_coaching_skill_draft` | Private skill previews awaiting explicit installation | `requested_by`, `coaching_job`, `conversation_owner`, `source_hash`, `request_key`, `status`, `result_json` |
 | `x_snc_build_agranx_coach_preferences` | Opt-in settings for the current user | `user`, `automatic_enabled`, `active_enabled`, `model`, `epoch` |
 | `x_snc_build_agranx_coach_memory` | Bounded progressive memory per user and conversation | `user`, `conversation_id`, `memory_json`, `latest_tip_json`, `lease_id` |
-| `x_snc_build_agranx_coach_work` | Deduplicated completed-tool checkpoints and requested draft revisions | `user`, `conversation_id`, `message_id`, `sequence`, `status`, `result_json` |
+| `x_snc_build_agranx_coach_work` | Native turn tracking, deduplicated turn analyses, and requested draft revisions | `user`, `conversation_id`, `message_id`, `sequence`, `status`, `result_json` |
 
 ### Platform Records Created
 
@@ -182,9 +182,13 @@ Installation creates an active native `sn_build_agent_user_instruction` with `ty
 
 ### Automatic and active coaching
 
-Open **Coach settings** (`?view=coach-settings`) and save your personal settings. Both switches default to off. **Automatic coaching** queues an asynchronous analysis after each new completed native tool message in a conversation you own. It uses your selected available model and consumes additional model usage for each checkpoint. Enabling it does not replay old tool completions.
+Open **Coach settings** (`?view=coach-settings`) and save your personal settings. Both switches default to off. **Automatic coaching** analyzes a finished Build Agent turn once per user prompt in a conversation you own, including responses that use no tools. It uses your selected available model and consumes additional model usage for each analysis. Enabling it does not replay historical turns.
 
-Each checkpoint includes the prompts and sanitized assistant summaries through that event, plus up to eight accumulated coaching behaviors for that same conversation. Raw tool inputs/results, private reasoning and attachment bodies are excluded. The model can return no tip; an actionable tip must have conversation evidence, and repeated tips are suppressed. Failed tools do not by themselves establish a prompt mistake. Checkpoints are deduplicated and serialized per conversation, with expiring leases and five-minute model timeouts. Changing settings invalidates pending results. Transient prepared inputs are cleared when work completes or fails.
+Native turn jobs establish when a turn starts and ends. Tool completions only help track persisted messages; they do not request coaching. Because the native terminal job update can precede the final saved response, the coach waits for a stable transcript before analysis. It binds that transcript to the exact user prompt and excludes later prompts. Ambiguous or unsettled turn boundaries prevent analysis rather than guessing.
+
+Each analysis includes the source prompt, sanitized assistant prose from the whole recorded response, all preceding turns, and up to eight accumulated coaching behaviors for that conversation. Long response excerpts favor the last assistant reply while retaining earlier progress and structural failure evidence. Raw tool inputs/results, private reasoning and attachment bodies are excluded. Failed or interrupted turns are explicitly marked as potentially incomplete; a recovered tool error does not establish an unresolved failure or a prompt mistake. Later corrective prompts can refine guidance about the original prompt.
+
+The model can return no tip; an actionable tip must have conversation evidence, and repeated tips are suppressed. Analyses are deduplicated per prompt and serialized per conversation, with expiring leases and five-minute model timeouts. A resumed attempt for an already analyzed prompt does not spend another automatic model call. Changing settings invalidates pending results. Transient prepared inputs are cleared when analysis completes or fails; lightweight native turn tracking retains only boundary metadata. Pending legacy per-tool analyses are ignored after this upgrade, while validated conversation memory with compatible turn references is retained.
 
 **Active coach** independently enables a glowing Otto icon immediately to the left of **Send** in the native Build Agent prompt composer, in both ServiceNow Studio (`/sn_glider_app/servicenow_studio.do`) and ServiceNow IDE (`/sn_glider_app/ide.do`). With automatic coaching enabled, it shows a balloon when a new relevant tip arrives. Write an unsent draft, then click Otto to request a revision. This also works for the first prompt in a new chat, without creating a Build Agent conversation. The popup shows the original, proposal and reason. **Apply revision** changes only the draft; **Cancel** leaves it untouched. Editing the draft or switching conversations invalidates the proposal. Nothing is submitted automatically. The popup's **Open conversation in BA Analytics** action opens the current saved conversation in a new tab. It is disabled for a new chat until the conversation is saved.
 

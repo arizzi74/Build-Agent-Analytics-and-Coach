@@ -88,7 +88,7 @@ export default function CoachAutomationSettings() {
         <fieldset className="ba-automation__options" disabled={saving}>
           <legend className="ba-automation__sr-only">Personal coaching options</legend>
           <label className={`ba-automation__option ${settings.automaticEnabled ? "ba-automation__option--on" : ""}`}>
-            <span className="ba-automation__option-text"><strong>Automatic coach</strong><span>Review each completed Build Agent tool using the prompts and responses already in that conversation. The coach builds a private, progressive memory of useful tips.</span><small>Runs only for your conversations. Analysis uses the selected model and consumes assists.</small></span>
+            <span className="ba-automation__option-text"><strong>Automatic coach</strong><span>Review each finished Build Agent turn using its prompt, a summary of the full response, and earlier conversation context. The coach builds a private, progressive memory of useful tips.</span><small>Runs once per turn in your conversations, including responses without tools. Analysis uses the selected model and consumes assists.</small></span>
             <input type="checkbox" role="switch" checked={settings.automaticEnabled} onChange={(event) => change({ automaticEnabled: event.target.checked })} aria-label="Automatic coach" />
           </label>
           <label className={`ba-automation__option ${settings.activeCoachEnabled ? "ba-automation__option--on" : ""}`}>

@@ -36,6 +36,41 @@ test('groups complete ordered user/response turns and keeps later corrections', 
   assert.equal(prepared.turns[1].prompt, 'I meant conversation detail. Keep navigation unchanged.');
 });
 
+test('completed-turn excerpts preserve the final outcome after lengthy progress and an earlier recovered error', () => {
+  const final = 'Fixed the issue, generated the requested dashboard, and verified that all tests pass. No remaining failures.';
+  const prepared = prepareConversation([
+    row(1, 'user', 'Build the dashboard.'),
+    row(2, 'assistant', 'Installation failed. ' + 'Investigating progress. '.repeat(100)),
+    row(3, 'assistant-tool', 'PRIVATE_TOOL_RESULT', { complete: true, success: false, toolInput: 'PRIVATE_TOOL_INPUT' }),
+    row(4, 'assistant', final),
+  ], { maxResponseChars: 300, preferFinalResponse: true });
+  const turn = prepared.turns[0];
+  assert.equal(prepared.canAnalyze, true);
+  assert.ok(turn.responseSummary.includes(final));
+  assert.ok(turn.responseSummary.length <= 300);
+  assert.match(turn.responseSummary, /Earlier updates:.*\n[\s\S]*Last reply:/);
+  assert.equal(turn.responseTruncated, true);
+  assert.equal(turn.assistantReportedError, true, 'historical error evidence remains available alongside the recovery');
+  assert.ok(!JSON.stringify(prepared).includes('PRIVATE_TOOL'));
+});
+
+test('completed-turn excerpt prioritization remains bounded when conversation budgets shrink', () => {
+  const rows = [];
+  for (let i = 0; i < 3; i++) {
+    rows.push(row(i * 3 + 1, 'user', 'Build report ' + i + '.'));
+    rows.push(row(i * 3 + 2, 'assistant', 'Progress update. '.repeat(400)));
+    rows.push(row(i * 3 + 3, 'assistant', 'Final outcome ' + i + ': generated the report and verified it successfully.'));
+  }
+  const prepared = prepareConversation(rows, { maxInputChars: 3000, preferFinalResponse: true });
+  assert.equal(prepared.canAnalyze, true);
+  assert.ok(prepared.stats.inputCharacters <= 3000);
+  prepared.turns.forEach((turn, i) => {
+    assert.match(turn.responseSummary, new RegExp('Final outcome ' + i));
+    assert.ok(turn.responseSummary.length < 1800);
+    assert.equal(turn.responseTruncated, true);
+  });
+});
+
 test('excludes tool payloads, reasoning, and nested streaming content but preserves failures', () => {
   const prepared = prepareConversation([
     row(1, 'user', 'Create a dashboard.'),

@@ -57,7 +57,7 @@ export function conversationMessages(id: string, includeContent: boolean): any[]
     const content = includeContent ? val(messages, 'content') : '';
     characters += content.length;
     if (characters > 20000000) throw new CoachingError(413, 'This conversation is too large to prepare safely.');
-    rows.push({sys_id: val(messages, 'sys_id'), content, sequence: val(messages, 'sequence'), sys_created_on: val(messages, 'sys_created_on')});
+    rows.push({sys_id: val(messages, 'sys_id'), content, sequence: val(messages, 'sequence'), sys_created_on: val(messages, 'sys_created_on'), active: val(messages, 'active'), sub_agent_id: val(messages, 'sub_agent_id')});
   }
   return rows;
 }

@@ -1,6 +1,6 @@
 import '@servicenow/sdk/global';
 import { Acl, BooleanColumn, BusinessRule, CrossScopePrivilege, DateTimeColumn, IntegerColumn, Record, ReferenceColumn, ScriptAction, ScriptInclude, StringColumn, Table } from '@servicenow/sdk/core';
-import { automationToolCompleted, automationEvent } from '../../server/coachAutomation';
+import { automationMessageChanged, automationTurnChanged, automationEvent } from '../../server/coachAutomation';
 import application from '../../../now.config.json';
 import packageMetadata from '../../../package.json';
 
@@ -30,7 +30,7 @@ export const x_snc_build_agranx_coach_work = Table({name: 'x_snc_build_agranx_co
   kind: StringColumn({label: 'Kind', maxLength: 20}),
   user: ReferenceColumn({label: 'User', referenceTable: 'sys_user', mandatory: true}),
   conversation_id: StringColumn({label: 'Conversation', maxLength: 32}),
-  message_id: StringColumn({label: 'Completed tool message', maxLength: 32}),
+  message_id: StringColumn({label: 'Source prompt message', maxLength: 32}),
   sequence: IntegerColumn({label: 'Message sequence'}),
   epoch: StringColumn({label: 'Settings revision', maxLength: 32}),
   run_token: StringColumn({label: 'Atomic execution token', maxLength: 32}),
@@ -60,10 +60,13 @@ Acl({$id: Now.ID['coach_work_create'], type: 'record', operation: 'create', tabl
 Acl({$id: Now.ID['coach_work_write'], type: 'record', operation: 'write', table: 'x_snc_build_agranx_coach_work', roles: ['admin'], adminOverrides: true});
 Acl({$id: Now.ID['coach_work_delete'], type: 'record', operation: 'delete', table: 'x_snc_build_agranx_coach_work', roles: ['admin'], adminOverrides: true});
 
-Record({$id: Now.ID['coach_automation_event'], table: 'sysevent_register', data: {event_name: 'x_snc_build_agranx.coach.work', table: 'x_snc_build_agranx_coach_work', description: 'Process one opted-in completed tool event or expire a coaching request.', fired_by: 'BA Analytics automatic coach'}});
+Record({$id: Now.ID['coach_automation_event'], table: 'sysevent_register', data: {event_name: 'x_snc_build_agranx.coach.work', table: 'x_snc_build_agranx_coach_work', description: 'Reconcile an opted-in native turn, analyze its completed response, or expire a coaching request.', fired_by: 'BA Analytics automatic coach'}});
 ScriptAction({$id: Now.ID['coach_automation_worker'], name: 'BA automatic coach worker', eventName: 'x_snc_build_agranx.coach.work', active: true, script: automationEvent});
-BusinessRule({$id: Now.ID['coach_automation_tool_hook'], name: 'BA coach completed tool', table: 'sn_build_agent_message', when: 'after', action: ['insert', 'update'], order: 1100, active: true, script: automationToolCompleted,
-  description: 'Queue a private coaching checkpoint only when a native tool completes and its conversation owner opted in.'});
+BusinessRule({$id: Now.ID['coach_automation_tool_hook'], name: 'BA coach reconcile native messages', table: 'sn_build_agent_message', when: 'after', action: ['insert', 'update'], order: 1100, active: true, script: automationMessageChanged,
+  description: 'Wake existing native-turn candidates when parent messages persist; message and tool completion never initiate coaching.'});
+
+BusinessRule({$id: Now.ID['coach_automation_turn_hook'], name: 'BA coach native turn lifecycle', table: 'sn_build_agent_job', when: 'after', action: ['insert', 'update'], order: 1100, active: true, script: automationTurnChanged,
+  description: 'Capture the pre-prompt sequence boundary and reconcile completed, failed or interrupted interactive turns for opted-in owners.'});
 
 ScriptInclude({$id: Now.ID['coach_automation_callback'], name: 'BAAutomationCallback', accessibleFrom: 'public', clientCallable: false, active: true, description: 'Validates model, owner, settings revision and conversation lease before saving automatic coaching.', script: `var BAAutomationCallback = Class.create();
 BAAutomationCallback.prototype = {
@@ -82,3 +85,5 @@ Record({$id: Now.ID['coach_automation_ui_script'], table: 'sys_ui_script', data:
 CrossScopePrivilege({$id: Now.ID['coach_automation_user_read'], targetName: 'sys_user', targetScope: 'global', targetType: 'sys_db_object', operation: 'read', status: 'allowed'});
 CrossScopePrivilege({$id: Now.ID['coach_automation_role_read'], targetName: 'sys_user_has_role', targetScope: 'global', targetType: 'sys_db_object', operation: 'read', status: 'allowed'});
 CrossScopePrivilege({$id: Now.ID['coach_automation_role_name_read'], targetName: 'sys_user_role', targetScope: 'global', targetType: 'sys_db_object', operation: 'read', status: 'allowed'});
+
+CrossScopePrivilege({$id: Now.ID['coach_automation_native_job_read'], targetName: 'sn_build_agent_job', targetScope: '6805ff49c0eb46ee969d42f0dd56b3bf', targetType: 'sys_db_object', operation: 'read', status: 'allowed'});

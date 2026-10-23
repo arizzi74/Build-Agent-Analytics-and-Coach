@@ -60,10 +60,11 @@ function stableKey(prefix, value) {
   for (var i = 0; i < value.length; i++) hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
   return prefix + (hash >>> 0).toString(16);
 }
-function context(prepared, event, allowEmpty) {
+function context(prepared, event, allowEmpty, requireTerminalTurn) {
+  event = event || {};
+  if (requireTerminalTurn && ['completed', 'failed', 'interrupted'].indexOf(event.turnStatus) < 0) invalid('a terminal native turn status is required.');
   if (allowEmpty && prepared && Array.isArray(prepared.turns) && !prepared.turns.length && (prepared.canAnalyze === true || (prepared.stats && prepared.stats.messages === 0 && !prepared.stats.unreadableMessages && !prepared.stats.unreadableToolCalls))) return { turns: [], lookup: {}, eventTurnId: null, eventFailedCount: 0, eventToolCount: 0 };
   if (!prepared || prepared.canAnalyze !== true || !Array.isArray(prepared.turns) || !prepared.turns.length) invalid('a readable prepared conversation is required.');
-  event = event || {};
   var eventTurnId = event.sourceTurnId || event.turnId || prepared.turns[prepared.turns.length - 1].turnId;
   var turns = [];
   var lookup = {};
@@ -76,8 +77,8 @@ function context(prepared, event, allowEmpty) {
     turns.push(turn);
     if (turn.turnId === eventTurnId) { found = true; break; }
   }
-  if (!found) invalid('the tool event refers to an unknown source turn.');
-  return { turns: turns, lookup: lookup, eventTurnId: eventTurnId, eventFailedCount: count(event.failedToolCount), eventToolCount: count(event.toolCallCount) };
+  if (!found) invalid('the turn event refers to an unknown source turn.');
+  return { turns: turns, lookup: lookup, eventTurnId: eventTurnId, eventTurnStatus: event.turnStatus || null, eventFailedCount: count(event.failedToolCount), eventToolCount: count(event.toolCallCount) };
 }
 function evidence(value, ctx, maximum) {
   if (!Array.isArray(value) || !value.length || value.length > maximum) invalid('one to five evidence turns are required.');
@@ -89,7 +90,7 @@ function evidence(value, ctx, maximum) {
   }
   return result;
 }
-function validateEvidence(item, ctx, requireLatest) {
+function validateEvidence(item, ctx, requireLatest, allowNativeTerminalFailure) {
   if (typeof item.turnId !== 'string' || !ctx.lookup[item.turnId]) invalid('unknown source turn.');
   if (CATEGORIES.indexOf(item.category) < 0) invalid('unknown advice category.');
   var ids = evidence(item.evidenceTurnIds, ctx, 5);
@@ -102,7 +103,7 @@ function validateEvidence(item, ctx, requireLatest) {
   for (var i = 0; i < all.length; i++) {
     var entry = ctx.lookup[all[i]];
     later = later || entry.index > source.index;
-    failed = failed || failureCount(entry.turn) > 0 || entry.turn.assistantReportedError === true || entry.turn.userReportedError === true || (all[i] === ctx.eventTurnId && ctx.eventFailedCount > 0);
+    failed = failed || failureCount(entry.turn) > 0 || entry.turn.assistantReportedError === true || entry.turn.userReportedError === true || (all[i] === ctx.eventTurnId && (ctx.eventFailedCount > 0 || (allowNativeTerminalFailure && ctx.eventTurnStatus === 'failed')));
   }
   if (item.category === 'intent_mismatch' && !later) invalid('intent mismatch requires later corrective evidence.');
   if ((item.category === 'error_prevention' || item.category === 'agent_or_environment') && !failed) invalid('error advice requires observed failure evidence.');
@@ -160,6 +161,10 @@ function inputData(ctx, memory, task, extra) {
     memory: memory,
     limitations: ['Response summaries are excerpts, not verified outcomes. Tool inputs, results, code, private reasoning and attachment contents are excluded. Omission markers represent missing evidence, not missing user requirements.']
   };
+  if (ctx.eventTurnStatus) {
+    data.event['kind'] = 'turn';
+    data.event['status'] = ctx.eventTurnStatus;
+  }
   if (extra) data['draft'] = extra;
   var serialized = JSON.stringify(data);
   while (serialized.length > INPUT_LIMIT && (promptLimit > 100 || responseLimit > 80)) {
@@ -186,24 +191,29 @@ function commonInstructions() {
 /**
  * @param {object} prepared Existing prepareConversation result.
  * @param {object|null} memory {version:1,entries:[{key,turnId,guidance,category,evidenceTurnIds}],recentTipKeys:[]} or null.
- * @param {object} event {sourceTurnId?,toolEventId?,failedToolCount?,toolCallCount?}; IDs/payloads never enter model input.
+ * @param {object} event {sourceTurnId?,turnStatus:'completed'|'failed'|'interrupted',failedToolCount?,toolCallCount?}; native IDs/payloads never enter model input.
  * @returns {{systemPrompt:string,userPrompt:string}}
  */
 export function buildProgressiveCoachingInput(prepared, memory, event) {
-  var ctx = context(prepared, event);
+  var ctx = context(prepared, event, false, true);
   var prior = normalizeMemory(memory, ctx);
   var systemPrompt = [commonInstructions(),
-    'A Build Agent tool has just ended. Assess the source turn in the context of every preceding user prompt supplied. This is an incremental checkpoint, not necessarily the end of a response.',
+    'A native Build Agent turn has ended and its persisted response has settled. Assess that user prompt and the whole supplied response summary in the context of every preceding user prompt. This is one turn analysis, not a checkpoint after an individual tool.',
+    'Read event.status precisely: completed means the native turn ended normally, not that the requested result was correct; failed or interrupted means the response may be incomplete. Never describe an interrupted or failed turn as a successfully completed response. A turn with zero tool calls is equally eligible for coaching.',
+    'Native failed status alone establishes an observed failure for a current tip, never its cause or a user mistake. When only that status demonstrates failure and the transcript has no tool, assistant, or user failure evidence, do not create lasting error-related memoryUpdates. Interruption alone does not establish a failure.',
+    'When response excerpts are labeled Earlier updates and Last reply, use those labels as chronological context: the last reply can explain corrections or recovery from earlier progress, but its claims are still unverified and its presence does not prove success.',
+    'Evaluate the final response and any later user corrections before diagnosing intermediate tool errors. Historical failed-tool counts and earlier error reports do not establish an unresolved final failure. If the assistant recovered within the turn, acknowledge the recovery and do not present that recovered error as still blocking or as evidence of a user mistake. Missing or shortened final prose is uncertainty, not proof of success, failure, or recovery.',
     'Return relevantTip:null when there is no clear, new, actionable issue. Do not announce successful tool completion, generic best practices or an issue already covered by memory. At most one short balloon tip may be shown.',
     'For a relevant tip, explain what specific ambiguity or misunderstanding was observed and how the suggestion helps. For an agent/environment fault, explicitly avoid attributing it to the user. Prompt clarity advice needs a concrete observed interaction, not speculative future errors.',
     'Record at most three new or refined concise coaching behaviors as memoryUpdates, using generalized roles instead of names, URLs, record IDs, paths, deployment targets or transcript quotations. Return [] when there is no supported new memory. Avoid storing one-off scope as a standing preference.',
+    'When this turn contains a correction to earlier work, revisit the earlier source prompt against the new evidence. Refine its existing source/category memory entry when warranted, referencing the correcting turn as evidence; do not move the original mistake to the correcting prompt or preserve advice contradicted by the supplied conversation. A newly added requirement alone is not a correction or evidence of a prior prompt mistake.',
     'Each tip or memory update needs turnId for the original source prompt and one to five distinct evidenceTurnIds. One of source/evidence must be sourceTurnId for this checkpoint. All IDs must exist in the supplied transcript. intent_mismatch requires evidence from a later corrective user turn; error_prevention and agent_or_environment require observed failure evidence. Use prompt_clarity only for concretely demonstrated ambiguity.',
     'Return ONLY one JSON object with EXACTLY this schema, without Markdown fences or extra properties:',
     '{"relevantTip":null,"memoryUpdates":[]}',
     'When supported, relevantTip is {"turnId":"T1","category":"intent_mismatch|error_prevention|prompt_clarity|agent_or_environment","message":"specific concise suggestion","why":"why it helps or what was misunderstood","evidenceTurnIds":["T1"]}. message maximum 240 characters; why maximum 200; plain text on one line.',
     'Each memoryUpdates entry is {"turnId":"T1","category":"intent_mismatch|error_prevention|prompt_clarity|agent_or_environment","guidance":"one concise context-sensitive coaching behavior","evidenceTurnIds":["T1"]}. guidance maximum 240 characters, plain text on one line; no markup, code, quoted transcript, sensitive details or embedded turn IDs.'
   ].join('\n');
-  return { systemPrompt: systemPrompt, userPrompt: inputData(ctx, prior, 'Evaluate this completed tool event and update bounded personal coaching memory.', null) };
+  return { systemPrompt: systemPrompt, userPrompt: inputData(ctx, prior, 'Evaluate this ended Build Agent turn and update bounded personal coaching memory.', null) };
 }
 
 /**
@@ -212,7 +222,7 @@ export function buildProgressiveCoachingInput(prepared, memory, event) {
  * Caller must serialize updates per conversation and bind them to the source event.
  */
 export function validateProgressiveCoachingOutput(value, prepared, memory, event) {
-  var ctx = context(prepared, event);
+  var ctx = context(prepared, event, false, true);
   var prior = normalizeMemory(memory, ctx);
   var output = parseOutput(value, 10000);
   exactKeys(output, ['relevantTip', 'memoryUpdates'], 'response');
@@ -221,9 +231,10 @@ export function validateProgressiveCoachingOutput(value, prepared, memory, event
   if (output.relevantTip !== null) {
     var item = output.relevantTip;
     exactKeys(item, ['turnId', 'category', 'message', 'why', 'evidenceTurnIds'], 'tip');
-    var ids = validateEvidence(item, ctx, true);
-    // Same source/category/checkpoint stays suppressed even if wording changes.
-    var key = stableKey('t-', item.category + '|' + item.turnId + '|' + ctx.eventTurnId);
+    var ids = validateEvidence(item, ctx, true, true);
+    // Same source/category/turn stays suppressed even if wording changes. The
+    // namespace prevents a legacy partial-tool tip from hiding a final result.
+    var key = stableKey('t-', 'turn-v1|' + item.category + '|' + item.turnId + '|' + ctx.eventTurnId);
     var message = shortText(item.message, 'tip message', 240);
     var why = shortText(item.why, 'tip explanation', 200);
     if (prior.recentTipKeys.indexOf(key) < 0) {

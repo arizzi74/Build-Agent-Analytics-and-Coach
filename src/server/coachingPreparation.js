@@ -26,6 +26,21 @@ function clipText(text, limit) {
   return text.slice(0, first) + marker + text.slice(text.length - (room - first));
 }
 
+function responseExcerpt(pieces, limit, preferFinal) {
+  var prose = pieces.join('\n\n');
+  if (!preferFinal || pieces.length < 2 || prose.length <= limit) return clipText(prose, limit);
+  var last = pieces[pieces.length - 1];
+  if (limit < 200) {
+    var omitted = '[Earlier updates omitted]\nLast reply:\n';
+    return omitted + clipText(last, limit - omitted.length);
+  }
+  var earlierLabel = 'Earlier updates:\n';
+  var finalLabel = '\n\nLast reply:\n';
+  var available = limit - earlierLabel.length - finalLabel.length;
+  var finalBudget = Math.min(last.length, Math.floor(available * 0.75));
+  return earlierLabel + clipText(pieces.slice(0, -1).join('\n\n'), available - finalBudget) + finalLabel + clipText(last, finalBudget);
+}
+
 function trackJsonDepth(line, state) {
   for (var i = 0; i < line.length; i++) {
     var character = line.charAt(i);
@@ -209,16 +224,18 @@ export function prepareConversation(rows, options) {
 
   var current = null;
   var responsePieces = [];
+  var responseSources = [];
   function finishTurn() {
     if (!current) return;
     var prose = responsePieces.join('\n\n');
-    current.responseSummary = prose ? clipText(prose, responseLimit) : 'No assistant prose recorded for this turn.';
+    current.responseSummary = prose ? responseExcerpt(responsePieces, responseLimit, options.preferFinalResponse === true) : 'No assistant prose recorded for this turn.';
     current.responseSummaryKind = 'extractive_assistant_prose';
     current.responseOriginalCharacters = prose.length;
     current.responseTruncated = prose.length > responseLimit;
     current.assistantReportedError = reportsFailure(prose);
     current.assistantErrors = failureExcerpts(prose);
     prepared.stats.assistantErrorReports += current.assistantErrors.length;
+    responseSources.push(responsePieces);
     responsePieces = [];
   }
   for (var j = 0; j < ordered.length; j++) {
@@ -294,7 +311,7 @@ export function prepareConversation(rows, options) {
         boundedTurn.promptTruncated = true;
       }
       if (boundedTurn.responseSummary.length > responseBudget) {
-        boundedTurn.responseSummary = clipText(boundedTurn.responseSummary, responseBudget);
+        boundedTurn.responseSummary = responseExcerpt(responseSources[k], responseBudget, options.preferFinalResponse === true);
         boundedTurn.responseTruncated = true;
       }
     }

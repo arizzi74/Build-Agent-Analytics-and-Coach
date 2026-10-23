@@ -271,6 +271,10 @@ declare global {
                         table: 'sysevent_register'
                         id: '173a362500c341469cc703463dd382ab'
                     }
+                    coach_automation_native_job_read: {
+                        table: 'sys_scope_privilege'
+                        id: 'a78725bfd1404590872360816eed1b96'
+                    }
                     coach_automation_revision_create: {
                         table: 'sys_ws_operation'
                         id: '35d0791a5756417e9f6262a927ebf91c'
@@ -302,6 +306,10 @@ declare global {
                     coach_automation_tool_hook: {
                         table: 'sys_script'
                         id: '685cf048ab514a56b0325ecef1f3482e'
+                    }
+                    coach_automation_turn_hook: {
+                        table: 'sys_script'
+                        id: 'd134485cdea24db3b9734c911c4b57ac'
                     }
                     coach_automation_ui_script: {
                         table: 'sys_ui_script'
