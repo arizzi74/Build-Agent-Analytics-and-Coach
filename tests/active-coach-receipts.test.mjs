@@ -31,6 +31,7 @@ async function fixture(options = {}) {
     dispatchEvent(event) { for (const handler of this.listeners[event.type] || []) handler(event); return !event.defaultPrevented; }
     getAttribute(name) { return this.attributes[name] || null; }
     setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
     getBoundingClientRect() { return { left: 500, top: 600, width: 40, height: 40, right: 540, bottom: 640 }; }
     focus() {}
     setSelectionRange() {}
@@ -72,7 +73,7 @@ async function fixture(options = {}) {
         const elements = new Map();
         const attached = { host, elements, addEventListener() {},
           querySelector(selector) {
-            if (!elements.has(selector)) { const el = new Element(); el.ownerDocument = ownerDocument; if (['.balloon', '.notification', '.revision-error'].includes(selector)) el.hidden = true; elements.set(selector, el); }
+            if (!elements.has(selector)) { const el = new Element(); el.ownerDocument = ownerDocument; if (['.balloon', '.notification', '.revision-error', '.analytics'].includes(selector)) el.hidden = true; if (selector === '.analytics-unavailable') el.disabled = true; elements.set(selector, el); }
             return elements.get(selector);
           },
           querySelectorAll() { return []; },
@@ -171,6 +172,53 @@ test('nested native webview Window facade opens guidance using exact DOM frame a
   assert.ok(f.scrollDocuments.includes(f.outerDocument));
   assert.ok(f.scrollDocuments.includes(f.document));
   assert.equal(f.posts.length, 0);
+});
+
+test('Analytics action links to the persisted native conversation without changing or reviewing its draft', async () => {
+  const f = await fixture();
+  f.setDraft(''); f.click('.otto'); await f.settle();
+  assert.equal(f.element('.analytics').hidden, false);
+  assert.equal(f.element('.analytics-unavailable').hidden, true);
+  assert.equal(f.element('.analytics').getAttribute('href'), '/x_snc_build_agranx_analytics.do?view=conversation&id=' + CHAT);
+  f.setDraft('Keep this draft unchanged.');
+  assert.equal(f.click('.analytics'), true, 'allows normal anchor navigation');
+  assert.equal(f.input.value, 'Keep this draft unchanged.');
+  assert.equal(f.native.userMessageDraft, f.input.value);
+  assert.equal(f.posts.length, 0);
+  assert.equal(!!f.element('dialog').open, false);
+});
+
+test('Analytics action revalidates the actual current chat on click and middle-click', async () => {
+  const f = await fixture();
+  f.setDraft(''); f.click('.otto'); await f.settle();
+  f.native.currentChatId = f.chat.id = '4'.repeat(32);
+  assert.equal(f.click('.analytics'), true);
+  assert.equal(f.element('.analytics').getAttribute('href'), '/x_snc_build_agranx_analytics.do?view=conversation&id=' + f.chat.id);
+  f.native.currentChatId = f.chat.id = '5'.repeat(32);
+  let prevented = false;
+  f.element('.analytics').dispatchEvent({ type: 'auxclick', preventDefault() { prevented = true; } });
+  assert.equal(prevented, false);
+  assert.equal(f.element('.analytics').getAttribute('href'), '/x_snc_build_agranx_analytics.do?view=conversation&id=' + f.chat.id);
+  assert.equal(f.posts.length, 0);
+});
+
+test('Analytics action disables unsaved chats and prevents stale navigation after switching to one', async () => {
+  for (const id of ['12345678-1234-4234-8234-123456789abc', '6'.repeat(32)]) {
+    const f = await fixture();
+    f.setDraft(''); f.click('.otto'); await f.settle();
+    f.native.currentChatId = f.chat.id = id; f.chat.persisted = false;
+    assert.equal(f.click('.analytics'), false, 'stale link navigation is cancelled');
+    assert.equal(f.element('.analytics').getAttribute('href'), null);
+    assert.equal(f.element('.analytics').hidden, true);
+    assert.equal(f.element('.analytics-unavailable').hidden, false);
+    assert.equal(f.element('.analytics-unavailable').disabled, true);
+    assert.equal(f.posts.length, 0);
+    assert.equal(f.input.value, '');
+  }
+  const unsaved = await fixture({ newChat: true, chatId: '12345678-1234-4234-8234-123456789abc' });
+  unsaved.setDraft(''); unsaved.click('.otto'); await unsaved.settle();
+  assert.equal(unsaved.element('.analytics').hidden, true);
+  assert.equal(unsaved.element('.analytics-unavailable').hidden, false);
 });
 
 async function expectAcknowledgement(f) {

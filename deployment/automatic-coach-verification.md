@@ -72,3 +72,17 @@ Live verification identified a native webview Window facade that omits `frameEle
 The iframe correction was deployed through a separate one-record update set, `499415e63bcc9b50d0c6ab7e53e45add` (remote `f8049cb665e5c759b77c2ddfb27cad4b`), again with zero preview problems, inserts, or deletions and exact read-back. The 64 Chromium checks were rerun against the final code; 32 additional checks covered the nested native Window facade.
 
 **18 final live Playwright checks passed against the deployed script** in a fresh browser: IDE at 1500 and 640 pixels wide, an IDE reload, and Studio. All four placements had 40-pixel circles, an exact eight-pixel gap, and zero vertical center difference. Wide and narrow balloons opened above the composer and stayed inside the viewport. The test did not edit drafts, submit messages, or request model reviews; enabled user settings remained exactly unchanged. Final composer and popup screenshots were visually inspected.
+
+## Open the current conversation in Analytics
+
+The Otto popup now replaces **Review my draft** with **Open conversation in BA Analytics**. The action opens the existing Analytics conversation-detail route in a separate tab with the current native conversation ID. Clicking Otto with a draft still starts the existing revision flow.
+
+The action is disabled until the native conversation is persisted. It refreshes when the popup opens and during polling, and rechecks the actual native chat on click or middle-click to avoid opening a previously selected conversation. The new tab has no opener access. No Analytics frontend or server change is required.
+
+**150 Node tests and 12 focused Chromium checks passed**, including current-conversation routing, real separate-tab navigation without opener access, chat changes, unsaved chats, and draft preservation without a model request. Clicking Otto still reviews a nonempty draft and waits for confirmation before applying it. JavaScript syntax and diff checks passed.
+
+On **23 October 2026**, MAIN received one existing UI-script update through native update set `071c6a6a3b48db50d0c6ab7e53e45a00` (remote `5590bd58140dcdb8971c6128aafc604e`). Preview reported zero problems, native commit validation reported no deletions, and strict read-back matched the reviewed source. Native IDE/Studio pages and enabled user preferences remained unchanged; TEST was not modified.
+
+**11 live Playwright feature checks and 3 final audit checks passed.** The reported IDE workspace verified the disabled action for an unsent chat. Native Studio opened an existing saved conversation, and the new action opened a separate Analytics tab displaying that exact record and title. The original conversation, draft, message cursor, and preferences were preserved. No prompt or model revision was submitted; popup and Analytics screenshots were visually inspected.
+
+The initial broad assertion of no native conversation writes detected the IDE's own persistence of an empty chat during navigation. That test-created row was removed after verifying its owner, creation time, unchanged metadata, absence from the baseline, and zero messages; read-back confirmed deletion. All pre-existing conversation IDs and modification timestamps were preserved. The initial diagnostic report remains retained, and the final audit makes no claim about exact request attribution because native POST timestamps were not captured.
